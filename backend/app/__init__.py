@@ -1,0 +1,1 @@
+"""LocalFix backend application package."""
