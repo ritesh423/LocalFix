@@ -1,0 +1,31 @@
+package com.localfix.app.ui.theme
+
+import androidx.compose.ui.graphics.Color
+
+internal val Ink = Color(0xFF17324D)
+internal val InkLight = Color(0xFFD8E7F2)
+internal val OnInkLight = Color(0xFF102B42)
+internal val ServiceTeal = Color(0xFF167C80)
+internal val ServiceTealLight = Color(0xFFC4E9E8)
+internal val OnServiceTealLight = Color(0xFF073E40)
+internal val WarmCanvas = Color(0xFFF5F6F2)
+internal val Paper = Color(0xFFFCFDF9)
+internal val Graphite = Color(0xFF25333D)
+internal val MutedSlate = Color(0xFF60717D)
+internal val Outline = Color(0xFF78868C)
+internal val OutlineSoft = Color(0xFFD7DEDA)
+internal val Amber = Color(0xFF9A5900)
+internal val AmberContainer = Color(0xFFFFDDB5)
+internal val OnAmberContainer = Color(0xFF4C2A00)
+internal val Brick = Color(0xFFB53A3A)
+internal val BrickContainer = Color(0xFFFFDAD7)
+internal val OnBrickContainer = Color(0xFF410005)
+
+internal val DarkCanvas = Color(0xFF101719)
+internal val DarkPaper = Color(0xFF151D20)
+internal val DarkSurface = Color(0xFF1D282C)
+internal val DarkInk = Color(0xFFAECBE2)
+internal val OnDarkInk = Color(0xFF173248)
+internal val DarkTeal = Color(0xFF83D4D2)
+internal val OnDarkTeal = Color(0xFF003738)
+internal val DarkOutline = Color(0xFF899399)

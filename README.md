@@ -6,9 +6,9 @@ calls and chat threads into assigned, traceable jobs.
 
 ## Project status
 
-**Current:** Stage 0 - Product definition and validation
+**Current:** Stage 1 - Android product skeleton
 
-**Latest session:** Stage 0, Session 1 - Product Definition and Repository Baseline
+**Latest session:** Stage 1, Session 1 - Android Project Foundation
 
 Development sessions use this format:
 
@@ -53,3 +53,4 @@ current boundaries and open decisions.
 - `docs/DESIGN_SYSTEM.md` - initial visual direction and UI principles
 - `docs/LEARNING_LOG.md` - personalized explanation record
 - `docs/sessions/` - outcome and decisions from every build session
+- `android/` - Kotlin and Jetpack Compose application
