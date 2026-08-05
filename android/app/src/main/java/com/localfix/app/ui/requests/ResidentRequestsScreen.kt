@@ -23,13 +23,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.localfix.app.ui.components.LocalFixScreenHeader
@@ -40,19 +37,11 @@ import com.localfix.app.ui.theme.LocalFixTheme
 @Composable
 fun ResidentRequestsScreen(
     uiState: ResidentRequestsUiState,
+    onFilterSelected: (RequestFilter) -> Unit,
     onReportIssue: () -> Unit,
     onRequestClick: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var selectedFilter by rememberSaveable { mutableStateOf(RequestFilter.ALL) }
-    val visibleRequests = uiState.requests.filter { request ->
-        when (selectedFilter) {
-            RequestFilter.ALL -> true
-            RequestFilter.ACTIVE -> request.status != RequestStatus.COMPLETED
-            RequestFilter.COMPLETED -> request.status == RequestStatus.COMPLETED
-        }
-    }
-
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
@@ -60,7 +49,7 @@ fun ResidentRequestsScreen(
     ) {
         item {
             LocalFixScreenHeader(
-                eyebrow = "Apartment A-204",
+                eyebrow = uiState.unitLabel,
                 title = "My requests",
                 subtitle = "Track repairs from report to completion.",
             )
@@ -96,15 +85,16 @@ fun ResidentRequestsScreen(
             ) {
                 RequestFilter.entries.forEach { filter ->
                     FilterChip(
-                        selected = selectedFilter == filter,
-                        onClick = { selectedFilter = filter },
+                        modifier = Modifier.testTag("request-filter-${filter.name.lowercase()}"),
+                        selected = uiState.selectedFilter == filter,
+                        onClick = { onFilterSelected(filter) },
                         label = { Text(filter.label) },
                     )
                 }
             }
         }
         items(
-            items = visibleRequests,
+            items = uiState.requests,
             key = ResidentRequestItem::id,
         ) { request ->
             RequestCard(
@@ -175,13 +165,15 @@ private fun RequestCard(
 
 @Composable
 private fun RequestStatusPill(request: ResidentRequestItem) {
-    val colors = when (request.status) {
-        RequestStatus.IN_PROGRESS -> LocalFixTheme.statusColors.activeContainer to
+    val colors = when (request.statusTone) {
+        RequestStatusTone.ACTIVE -> LocalFixTheme.statusColors.activeContainer to
             LocalFixTheme.statusColors.onActiveContainer
-        RequestStatus.AWAITING_CONFIRMATION -> LocalFixTheme.statusColors.attentionContainer to
+        RequestStatusTone.ATTENTION -> LocalFixTheme.statusColors.attentionContainer to
             LocalFixTheme.statusColors.onAttentionContainer
-        RequestStatus.COMPLETED -> MaterialTheme.colorScheme.primaryContainer to
+        RequestStatusTone.COMPLETED -> MaterialTheme.colorScheme.primaryContainer to
             MaterialTheme.colorScheme.onPrimaryContainer
+        RequestStatusTone.NEUTRAL -> MaterialTheme.colorScheme.surfaceVariant to
+            MaterialTheme.colorScheme.onSurfaceVariant
     }
 
     Surface(
@@ -204,6 +196,7 @@ private fun ResidentRequestsPreview() {
     LocalFixTheme(darkTheme = false) {
         ResidentRequestsScreen(
             uiState = ResidentRequestsUiState.sample,
+            onFilterSelected = {},
             onReportIssue = {},
             onRequestClick = {},
         )

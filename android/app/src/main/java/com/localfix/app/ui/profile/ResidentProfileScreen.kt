@@ -38,6 +38,7 @@ import com.localfix.app.ui.theme.LocalFixTheme
 
 @Composable
 fun ResidentProfileScreen(
+    uiState: ResidentProfileUiState,
     onSwitchRole: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -52,7 +53,7 @@ fun ResidentProfileScreen(
             title = "Profile",
             subtitle = "Your apartment and contact details.",
         )
-        ProfileIdentity()
+        ProfileIdentity(uiState)
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
@@ -62,10 +63,10 @@ fun ResidentProfileScreen(
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         ) {
             Column {
-                ProfileDetail(Icons.Outlined.Apartment, "Property", "Lakeview Residency")
-                ProfileDetail(Icons.Outlined.HomeWork, "Home", "Apartment A-204")
-                ProfileDetail(Icons.Outlined.Phone, "Phone", "+91 98765 43210")
-                ProfileDetail(Icons.Outlined.Email, "Email", "ritesh@example.com")
+                ProfileDetail(Icons.Outlined.Apartment, "Property", uiState.propertyName)
+                ProfileDetail(Icons.Outlined.HomeWork, "Home", uiState.unitLabel)
+                ProfileDetail(Icons.Outlined.Phone, "Phone", uiState.phone)
+                ProfileDetail(Icons.Outlined.Email, "Email", uiState.email)
             }
         }
         OutlinedButton(
@@ -81,7 +82,7 @@ fun ResidentProfileScreen(
 }
 
 @Composable
-private fun ProfileIdentity() {
+private fun ProfileIdentity(uiState: ResidentProfileUiState) {
     Row(
         modifier = Modifier.padding(LocalFixSpacing.large),
         verticalAlignment = Alignment.CenterVertically,
@@ -95,7 +96,7 @@ private fun ProfileIdentity() {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Spacer(modifier = Modifier.weight(1f))
                 Text(
-                    text = "R",
+                    text = uiState.name.take(1).uppercase(),
                     style = MaterialTheme.typography.headlineSmall,
                 )
                 Spacer(modifier = Modifier.weight(1f))
@@ -104,12 +105,12 @@ private fun ProfileIdentity() {
         Spacer(modifier = Modifier.width(LocalFixSpacing.medium))
         Column {
             Text(
-                text = "Ritesh",
+                text = uiState.name,
                 style = MaterialTheme.typography.titleLarge,
             )
             Spacer(modifier = Modifier.height(LocalFixSpacing.extraSmall))
             Text(
-                text = "Resident · Active",
+                text = uiState.statusLabel,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -153,6 +154,9 @@ private fun ProfileDetail(
 @Composable
 private fun ResidentProfilePreview() {
     LocalFixTheme(darkTheme = false) {
-        ResidentProfileScreen(onSwitchRole = {})
+        ResidentProfileScreen(
+            uiState = ResidentProfileUiState.sample,
+            onSwitchRole = {},
+        )
     }
 }

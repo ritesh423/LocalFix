@@ -5,9 +5,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import com.localfix.app.data.DefaultAppContainer
 import com.localfix.app.ui.LocalFixApp
 
 class MainActivity : ComponentActivity() {
+    private val appContainer = DefaultAppContainer()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(
@@ -18,7 +21,7 @@ class MainActivity : ComponentActivity() {
             ),
         )
         setContent {
-            LocalFixApp()
+            LocalFixApp(appContainer)
         }
     }
 }

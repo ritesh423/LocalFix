@@ -14,6 +14,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
@@ -23,17 +24,24 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.localfix.app.data.resident.ResidentRepository
 import com.localfix.app.ui.home.ResidentHomeScreen
-import com.localfix.app.ui.home.ResidentHomeUiState
 import com.localfix.app.ui.profile.ResidentProfileScreen
 import com.localfix.app.ui.requests.ResidentRequestsScreen
-import com.localfix.app.ui.requests.ResidentRequestsUiState
+import com.localfix.app.ui.resident.ResidentViewModel
 
 @Composable
 fun ResidentNavigation(
+    repository: ResidentRepository,
     onSwitchRole: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val residentViewModel: ResidentViewModel = viewModel(
+        factory = ResidentViewModel.factory(repository),
+    )
+    val uiState by residentViewModel.uiState.collectAsStateWithLifecycle()
     val navController = rememberNavController()
     val currentDestination = navController.currentBackStackEntryAsState().value?.destination
 
@@ -76,7 +84,7 @@ fun ResidentNavigation(
         ) {
             composable(ResidentDestination.HOME.route) {
                 ResidentHomeScreen(
-                    uiState = ResidentHomeUiState.sample,
+                    uiState = uiState.home,
                     onReportIssue = {
                         navController.navigate(ResidentDestination.REQUESTS.route)
                     },
@@ -90,13 +98,17 @@ fun ResidentNavigation(
             }
             composable(ResidentDestination.REQUESTS.route) {
                 ResidentRequestsScreen(
-                    uiState = ResidentRequestsUiState.sample,
+                    uiState = uiState.requests,
+                    onFilterSelected = residentViewModel::selectRequestFilter,
                     onReportIssue = {},
                     onRequestClick = {},
                 )
             }
             composable(ResidentDestination.PROFILE.route) {
-                ResidentProfileScreen(onSwitchRole = onSwitchRole)
+                ResidentProfileScreen(
+                    uiState = uiState.profile,
+                    onSwitchRole = onSwitchRole,
+                )
             }
         }
     }

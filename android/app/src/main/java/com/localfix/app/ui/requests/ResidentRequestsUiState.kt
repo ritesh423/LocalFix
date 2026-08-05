@@ -1,16 +1,20 @@
 package com.localfix.app.ui.requests
 
 data class ResidentRequestsUiState(
+    val unitLabel: String,
+    val selectedFilter: RequestFilter,
     val requests: List<ResidentRequestItem>,
 ) {
     companion object {
         val sample = ResidentRequestsUiState(
+            unitLabel = "Apartment A-204",
+            selectedFilter = RequestFilter.ALL,
             requests = listOf(
                 ResidentRequestItem(
                     id = "LF-1042",
                     title = "Leaking kitchen tap",
                     category = "Plumbing",
-                    status = RequestStatus.IN_PROGRESS,
+                    statusTone = RequestStatusTone.ACTIVE,
                     statusLabel = "In progress",
                     updatedLabel = "Updated 18 min ago",
                 ),
@@ -18,7 +22,7 @@ data class ResidentRequestsUiState(
                     id = "LF-1018",
                     title = "Bedroom switch sparking",
                     category = "Electrical",
-                    status = RequestStatus.AWAITING_CONFIRMATION,
+                    statusTone = RequestStatusTone.ATTENTION,
                     statusLabel = "Confirm repair",
                     updatedLabel = "Completed yesterday",
                 ),
@@ -26,7 +30,7 @@ data class ResidentRequestsUiState(
                     id = "LF-0994",
                     title = "Washing machine vibration",
                     category = "Appliance",
-                    status = RequestStatus.COMPLETED,
+                    statusTone = RequestStatusTone.COMPLETED,
                     statusLabel = "Completed",
                     updatedLabel = "Closed 12 Jul",
                 ),
@@ -39,15 +43,16 @@ data class ResidentRequestItem(
     val id: String,
     val title: String,
     val category: String,
-    val status: RequestStatus,
+    val statusTone: RequestStatusTone,
     val statusLabel: String,
     val updatedLabel: String,
 )
 
-enum class RequestStatus {
-    IN_PROGRESS,
-    AWAITING_CONFIRMATION,
+enum class RequestStatusTone {
+    ACTIVE,
+    ATTENTION,
     COMPLETED,
+    NEUTRAL,
 }
 
 enum class RequestFilter(val label: String) {

@@ -5,6 +5,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import com.localfix.app.data.DefaultAppContainer
 import org.junit.Rule
 import org.junit.Test
 
@@ -15,7 +16,7 @@ class LocalFixNavigationTest {
     @Test
     fun residentCanMoveBetweenMainDestinationsAndSwitchWorkspace() {
         composeRule.setContent {
-            LocalFixApp()
+            LocalFixApp(DefaultAppContainer())
         }
 
         composeRule.onNodeWithText("Choose your workspace").assertIsDisplayed()
@@ -24,6 +25,8 @@ class LocalFixNavigationTest {
 
         composeRule.onNodeWithTag("resident-nav-resident/requests").performClick()
         composeRule.onNodeWithText("My requests").assertIsDisplayed()
+        composeRule.onNodeWithTag("request-filter-completed").performClick()
+        composeRule.onNodeWithText("Washing machine vibration").assertIsDisplayed()
 
         composeRule.onNodeWithTag("resident-nav-resident/profile").performClick()
         composeRule.onNodeWithText("Your apartment and contact details.").assertIsDisplayed()

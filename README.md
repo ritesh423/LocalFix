@@ -6,9 +6,9 @@ calls and chat threads into assigned, traceable jobs.
 
 ## Project status
 
-**Current:** Stage 1 - Android product skeleton
+**Current:** Stage 1 complete - next is the resident ticket vertical slice
 
-**Latest session:** Stage 1, Session 2 - Navigation and Role Selection
+**Latest session:** Stage 1, Session 3 - Resident State Architecture
 
 Development sessions use this format:
 

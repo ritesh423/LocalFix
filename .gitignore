@@ -1,0 +1,31 @@
+# Android and Gradle
+.gradle/
+build/
+**/build/
+local.properties
+*.iml
+.idea/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Kotlin
+.kotlin/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# Environment and credentials
+.env
+.env.*
+!.env.example
+*.jks
+*.keystore
+service-account*.json
+google-services.json
+
+# Operating systems
+.DS_Store
+Thumbs.db
