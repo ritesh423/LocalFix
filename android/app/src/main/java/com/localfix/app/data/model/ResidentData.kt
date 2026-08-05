@@ -17,10 +17,21 @@ data class ResidentAccount(
 data class MaintenanceRequest(
     val id: String,
     val title: String,
+    val description: String,
     val category: ServiceCategory,
     val status: TicketStatus,
+    val urgencySuggestion: UrgencySuggestion,
+    val accessWindow: AccessWindow,
     val assignedWorker: String,
     val updatedLabel: String,
+)
+
+data class NewMaintenanceRequest(
+    val title: String,
+    val description: String,
+    val category: ServiceCategory,
+    val urgencySuggestion: UrgencySuggestion,
+    val accessWindow: AccessWindow,
 )
 
 enum class ServiceCategory(val label: String) {
@@ -38,4 +49,17 @@ enum class TicketStatus {
     AWAITING_CONFIRMATION,
     COMPLETED,
     CANCELLED,
+}
+
+enum class UrgencySuggestion {
+    ROUTINE,
+    SOON,
+    URGENT,
+}
+
+enum class AccessWindow {
+    ANYTIME,
+    MORNING,
+    AFTERNOON,
+    EVENING,
 }

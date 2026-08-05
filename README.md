@@ -6,9 +6,9 @@ calls and chat threads into assigned, traceable jobs.
 
 ## Project status
 
-**Current:** Stage 1 complete - next is the resident ticket vertical slice
+**Current:** Stage 2 - Resident ticket vertical slice
 
-**Latest session:** Stage 1, Session 3 - Resident State Architecture
+**Latest session:** Stage 2, Session 1 - Request Creation and Draft State
 
 Development sessions use this format:
 

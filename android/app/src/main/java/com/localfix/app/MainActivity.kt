@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.core.view.WindowCompat
 import com.localfix.app.data.DefaultAppContainer
 import com.localfix.app.ui.LocalFixApp
 
@@ -23,5 +24,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             LocalFixApp(appContainer)
         }
+        WindowCompat.getInsetsController(window, window.decorView)
+            .isAppearanceLightStatusBars = false
     }
 }

@@ -6,10 +6,16 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.localfix.app.data.model.ResidentData
+import com.localfix.app.data.model.NewMaintenanceRequest
+import com.localfix.app.data.model.AccessWindow
 import com.localfix.app.data.model.ServiceCategory
 import com.localfix.app.data.model.TicketStatus
+import com.localfix.app.data.model.UrgencySuggestion
 import com.localfix.app.data.resident.ResidentRepository
 import com.localfix.app.ui.home.MaintenanceRequestSummary
+import com.localfix.app.ui.create.CreateRequestUiState
+import com.localfix.app.ui.create.RequestDraft
+import com.localfix.app.ui.create.RequestDraftErrors
 import com.localfix.app.ui.home.ResidentHomeUiState
 import com.localfix.app.ui.home.ServiceCategoryType
 import com.localfix.app.ui.home.ServiceCategory as ServiceCategoryItem
@@ -22,11 +28,17 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 class ResidentViewModel(
     private val repository: ResidentRepository,
 ) : ViewModel() {
     private val selectedFilter = MutableStateFlow(RequestFilter.ALL)
+    private val mutableCreateRequestState = MutableStateFlow(CreateRequestUiState())
+
+    val createRequestState = mutableCreateRequestState.asStateFlow()
 
     val uiState = combine(
         repository.residentData,
@@ -45,6 +57,96 @@ class ResidentViewModel(
         selectedFilter.value = filter
     }
 
+    fun startRequestDraft(category: ServiceCategory? = null) {
+        if (category == null) return
+        mutableCreateRequestState.update { state ->
+            state.copy(
+                draft = state.draft.copy(category = category),
+                errors = state.errors.copy(category = null),
+            )
+        }
+    }
+
+    fun updateDraftCategory(category: ServiceCategory) {
+        mutableCreateRequestState.update { state ->
+            state.copy(
+                draft = state.draft.copy(category = category),
+                errors = state.errors.copy(category = null),
+            )
+        }
+    }
+
+    fun updateDraftTitle(title: String) {
+        mutableCreateRequestState.update { state ->
+            state.copy(
+                draft = state.draft.copy(title = title.take(80)),
+                errors = state.errors.copy(title = null),
+            )
+        }
+    }
+
+    fun updateDraftDescription(description: String) {
+        mutableCreateRequestState.update { state ->
+            state.copy(
+                draft = state.draft.copy(description = description.take(500)),
+                errors = state.errors.copy(description = null),
+            )
+        }
+    }
+
+    fun updateDraftUrgency(urgency: UrgencySuggestion) {
+        mutableCreateRequestState.update { state ->
+            state.copy(draft = state.draft.copy(urgencySuggestion = urgency))
+        }
+    }
+
+    fun updateDraftAccessWindow(accessWindow: AccessWindow) {
+        mutableCreateRequestState.update { state ->
+            state.copy(draft = state.draft.copy(accessWindow = accessWindow))
+        }
+    }
+
+    fun submitRequestDraft() {
+        val draft = mutableCreateRequestState.value.draft
+        val errors = draft.validate()
+        if (errors.hasErrors) {
+            mutableCreateRequestState.update { state -> state.copy(errors = errors) }
+            return
+        }
+
+        mutableCreateRequestState.update { state ->
+            state.copy(isSubmitting = true, submissionError = null)
+        }
+        viewModelScope.launch {
+            runCatching {
+                repository.createRequest(draft.toNewRequest())
+            }.onSuccess { requestId ->
+                selectedFilter.value = RequestFilter.ALL
+                mutableCreateRequestState.update { state ->
+                    state.copy(
+                        isSubmitting = false,
+                        submittedRequestId = requestId,
+                    )
+                }
+            }.onFailure {
+                mutableCreateRequestState.update { state ->
+                    state.copy(
+                        isSubmitting = false,
+                        submissionError = "Couldn't save the request. Try again.",
+                    )
+                }
+            }
+        }
+    }
+
+    fun consumeRequestSubmission() {
+        mutableCreateRequestState.value = CreateRequestUiState()
+    }
+
+    fun discardRequestDraft() {
+        mutableCreateRequestState.value = CreateRequestUiState()
+    }
+
     companion object {
         fun factory(repository: ResidentRepository): ViewModelProvider.Factory = viewModelFactory {
             initializer {
@@ -53,6 +155,24 @@ class ResidentViewModel(
         }
     }
 }
+
+private fun RequestDraft.validate(): RequestDraftErrors = RequestDraftErrors(
+    category = if (category == null) "Choose a service category" else null,
+    title = if (title.trim().length < 5) "Enter at least 5 characters" else null,
+    description = if (description.trim().length < 10) {
+        "Describe the problem in at least 10 characters"
+    } else {
+        null
+    },
+)
+
+private fun RequestDraft.toNewRequest(): NewMaintenanceRequest = NewMaintenanceRequest(
+    title = title.trim(),
+    description = description.trim(),
+    category = requireNotNull(category),
+    urgencySuggestion = urgencySuggestion,
+    accessWindow = accessWindow,
+)
 
 data class ResidentUiState(
     val home: ResidentHomeUiState,

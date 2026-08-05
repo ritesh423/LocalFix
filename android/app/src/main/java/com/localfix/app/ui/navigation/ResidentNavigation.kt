@@ -15,6 +15,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
@@ -27,7 +28,10 @@ import androidx.navigation.compose.rememberNavController
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.localfix.app.data.resident.ResidentRepository
+import com.localfix.app.data.model.ServiceCategory
+import com.localfix.app.ui.create.CreateRequestScreen
 import com.localfix.app.ui.home.ResidentHomeScreen
+import com.localfix.app.ui.home.ServiceCategoryType
 import com.localfix.app.ui.profile.ResidentProfileScreen
 import com.localfix.app.ui.requests.ResidentRequestsScreen
 import com.localfix.app.ui.resident.ResidentViewModel
@@ -42,37 +46,52 @@ fun ResidentNavigation(
         factory = ResidentViewModel.factory(repository),
     )
     val uiState by residentViewModel.uiState.collectAsStateWithLifecycle()
+    val createRequestState by residentViewModel.createRequestState.collectAsStateWithLifecycle()
     val navController = rememberNavController()
     val currentDestination = navController.currentBackStackEntryAsState().value?.destination
+
+    LaunchedEffect(createRequestState.submittedRequestId) {
+        if (createRequestState.submittedRequestId != null) {
+            residentViewModel.consumeRequestSubmission()
+            navController.navigate(ResidentDestination.REQUESTS.route) {
+                popUpTo(CREATE_REQUEST_ROUTE) {
+                    inclusive = true
+                }
+                launchSingleTop = true
+            }
+        }
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
-            NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
-                ResidentDestination.entries.forEach { destination ->
-                    NavigationBarItem(
-                        modifier = Modifier.testTag("resident-nav-${destination.route}"),
-                        selected = currentDestination?.hierarchy?.any {
-                            it.route == destination.route
-                        } == true,
-                        onClick = {
-                            navController.navigate(destination.route) {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
+            if (currentDestination?.route != CREATE_REQUEST_ROUTE) {
+                NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+                    ResidentDestination.entries.forEach { destination ->
+                        NavigationBarItem(
+                            modifier = Modifier.testTag("resident-nav-${destination.route}"),
+                            selected = currentDestination?.hierarchy?.any {
+                                it.route == destination.route
+                            } == true,
+                            onClick = {
+                                navController.navigate(destination.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
                                 }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                        icon = {
-                            Icon(
-                                imageVector = destination.icon,
-                                contentDescription = null,
-                            )
-                        },
-                        label = { Text(destination.label) },
-                    )
+                            },
+                            icon = {
+                                Icon(
+                                    imageVector = destination.icon,
+                                    contentDescription = null,
+                                )
+                            },
+                            label = { Text(destination.label) },
+                        )
+                    }
                 }
             }
         },
@@ -86,13 +105,14 @@ fun ResidentNavigation(
                 ResidentHomeScreen(
                     uiState = uiState.home,
                     onReportIssue = {
-                        navController.navigate(ResidentDestination.REQUESTS.route)
+                        navController.navigate(CREATE_REQUEST_ROUTE)
                     },
                     onRequestClick = {
                         navController.navigate(ResidentDestination.REQUESTS.route)
                     },
-                    onCategoryClick = {
-                        navController.navigate(ResidentDestination.REQUESTS.route)
+                    onCategoryClick = { category ->
+                        residentViewModel.startRequestDraft(category.toDataCategory())
+                        navController.navigate(CREATE_REQUEST_ROUTE)
                     },
                 )
             }
@@ -100,7 +120,9 @@ fun ResidentNavigation(
                 ResidentRequestsScreen(
                     uiState = uiState.requests,
                     onFilterSelected = residentViewModel::selectRequestFilter,
-                    onReportIssue = {},
+                    onReportIssue = {
+                        navController.navigate(CREATE_REQUEST_ROUTE)
+                    },
                     onRequestClick = {},
                 )
             }
@@ -110,9 +132,27 @@ fun ResidentNavigation(
                     onSwitchRole = onSwitchRole,
                 )
             }
+            composable(CREATE_REQUEST_ROUTE) {
+                CreateRequestScreen(
+                    uiState = createRequestState,
+                    onBack = { navController.popBackStack() },
+                    onDiscard = {
+                        residentViewModel.discardRequestDraft()
+                        navController.popBackStack()
+                    },
+                    onCategorySelected = residentViewModel::updateDraftCategory,
+                    onTitleChanged = residentViewModel::updateDraftTitle,
+                    onDescriptionChanged = residentViewModel::updateDraftDescription,
+                    onUrgencySelected = residentViewModel::updateDraftUrgency,
+                    onAccessWindowSelected = residentViewModel::updateDraftAccessWindow,
+                    onSubmit = residentViewModel::submitRequestDraft,
+                )
+            }
         }
     }
 }
+
+private const val CREATE_REQUEST_ROUTE = "resident/requests/new"
 
 private enum class ResidentDestination(
     val route: String,
@@ -122,4 +162,11 @@ private enum class ResidentDestination(
     HOME("resident/home", "Home", Icons.Outlined.Home),
     REQUESTS("resident/requests", "Requests", Icons.AutoMirrored.Outlined.ReceiptLong),
     PROFILE("resident/profile", "Profile", Icons.Outlined.PersonOutline),
+}
+
+private fun ServiceCategoryType.toDataCategory(): ServiceCategory = when (this) {
+    ServiceCategoryType.PLUMBING -> ServiceCategory.PLUMBING
+    ServiceCategoryType.ELECTRICAL -> ServiceCategory.ELECTRICAL
+    ServiceCategoryType.APPLIANCE -> ServiceCategory.APPLIANCE
+    ServiceCategoryType.OTHER -> ServiceCategory.OTHER
 }

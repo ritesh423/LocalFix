@@ -5,6 +5,8 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performTextInput
 import com.localfix.app.data.DefaultAppContainer
 import org.junit.Rule
 import org.junit.Test
@@ -22,6 +24,18 @@ class LocalFixNavigationTest {
         composeRule.onNodeWithText("Choose your workspace").assertIsDisplayed()
         composeRule.onNodeWithText("Resident").performClick()
         composeRule.onNodeWithText("Your home, taken care of.").assertIsDisplayed()
+        composeRule.onNodeWithText("Report an issue").performClick()
+        composeRule.onNodeWithText("Give the maintenance team enough detail to act quickly.")
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("request-category-plumbing").performClick()
+        composeRule.onNodeWithTag("request-title").performTextInput("Water dripping below sink")
+        composeRule.onNodeWithTag("request-description").performTextInput(
+            "Water collects below the kitchen sink after using the tap.",
+        )
+        composeRule.onNodeWithTag("create-request-list").performScrollToIndex(5)
+        composeRule.onNodeWithTag("submit-request").performClick()
+        composeRule.onNodeWithText("My requests").assertIsDisplayed()
+        composeRule.onNodeWithText("Water dripping below sink").assertIsDisplayed()
 
         composeRule.onNodeWithTag("resident-nav-resident/requests").performClick()
         composeRule.onNodeWithText("My requests").assertIsDisplayed()
