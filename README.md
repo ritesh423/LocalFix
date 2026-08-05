@@ -8,7 +8,7 @@ calls and chat threads into assigned, traceable jobs.
 
 **Current:** Stage 1 - Android product skeleton
 
-**Latest session:** Stage 1, Session 1 - Android Project Foundation
+**Latest session:** Stage 1, Session 2 - Navigation and Role Selection
 
 Development sessions use this format:
 

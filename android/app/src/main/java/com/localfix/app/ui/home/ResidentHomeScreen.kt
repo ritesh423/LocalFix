@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -21,26 +20,19 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Apartment
 import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.ElectricalServices
 import androidx.compose.material.icons.outlined.Handyman
-import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.MoreHoriz
-import androidx.compose.material.icons.outlined.PersonOutline
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -63,83 +55,77 @@ fun ResidentHomeScreen(
     onCategoryClick: (ServiceCategoryType) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        containerColor = MaterialTheme.colorScheme.background,
-        bottomBar = { ResidentBottomBar() },
-    ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(bottom = innerPadding.calculateBottomPadding()),
-            contentPadding = PaddingValues(bottom = LocalFixSpacing.large),
-        ) {
+    LazyColumn(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+        contentPadding = PaddingValues(bottom = LocalFixSpacing.large),
+    ) {
+        item {
+            ResidentHeader(
+                uiState = uiState,
+                onReportIssue = onReportIssue,
+            )
+        }
+
+        item {
+            StatusOverview(
+                activeCount = uiState.activeRequestCount,
+                awaitingCount = uiState.awaitingConfirmationCount,
+                modifier = Modifier.padding(
+                    horizontal = LocalFixSpacing.medium,
+                    vertical = LocalFixSpacing.large,
+                ),
+            )
+        }
+
+        uiState.activeRequest?.let { request ->
             item {
-                ResidentHeader(
-                    uiState = uiState,
-                    onReportIssue = onReportIssue,
+                SectionHeader(
+                    title = "Active request",
+                    action = "View all",
                 )
             }
-
             item {
-                StatusOverview(
-                    activeCount = uiState.activeRequestCount,
-                    awaitingCount = uiState.awaitingConfirmationCount,
+                ActiveRequestCard(
+                    request = request,
+                    onClick = { onRequestClick(request.id) },
                     modifier = Modifier.padding(
-                        horizontal = LocalFixSpacing.medium,
-                        vertical = LocalFixSpacing.large,
+                        start = LocalFixSpacing.medium,
+                        end = LocalFixSpacing.medium,
+                        top = LocalFixSpacing.small,
+                        bottom = LocalFixSpacing.large,
                     ),
                 )
             }
+        }
 
-            uiState.activeRequest?.let { request ->
-                item {
-                    SectionHeader(
-                        title = "Active request",
-                        action = "View all",
+        item {
+            SectionHeader(
+                title = "What needs fixing?",
+                subtitle = "Choose a category to report an issue",
+            )
+        }
+
+        items(uiState.categories.chunked(2)) { categoryRow ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        horizontal = LocalFixSpacing.medium,
+                        vertical = LocalFixSpacing.extraSmall,
+                    ),
+                horizontalArrangement = Arrangement.spacedBy(LocalFixSpacing.small),
+            ) {
+                categoryRow.forEach { category ->
+                    CategoryCard(
+                        category = category,
+                        onClick = { onCategoryClick(category.type) },
+                        modifier = Modifier.weight(1f),
                     )
                 }
-                item {
-                    ActiveRequestCard(
-                        request = request,
-                        onClick = { onRequestClick(request.id) },
-                        modifier = Modifier.padding(
-                            start = LocalFixSpacing.medium,
-                            end = LocalFixSpacing.medium,
-                            top = LocalFixSpacing.small,
-                            bottom = LocalFixSpacing.large,
-                        ),
-                    )
-                }
-            }
-
-            item {
-                SectionHeader(
-                    title = "What needs fixing?",
-                    subtitle = "Choose a category to report an issue",
-                )
-            }
-
-            items(uiState.categories.chunked(2)) { categoryRow ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(
-                            horizontal = LocalFixSpacing.medium,
-                            vertical = LocalFixSpacing.extraSmall,
-                        ),
-                    horizontalArrangement = Arrangement.spacedBy(LocalFixSpacing.small),
-                ) {
-                    categoryRow.forEach { category ->
-                        CategoryCard(
-                            category = category,
-                            onClick = { onCategoryClick(category.type) },
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                    if (categoryRow.size == 1) {
-                        Spacer(modifier = Modifier.weight(1f))
-                    }
+                if (categoryRow.size == 1) {
+                    Spacer(modifier = Modifier.weight(1f))
                 }
             }
         }
@@ -470,46 +456,6 @@ private val ServiceCategory.icon: ImageVector
         ServiceCategoryType.APPLIANCE -> Icons.Outlined.Handyman
         ServiceCategoryType.OTHER -> Icons.Outlined.MoreHoriz
     }
-
-@Composable
-private fun ResidentBottomBar() {
-    NavigationBar(
-        modifier = Modifier.navigationBarsPadding(),
-        containerColor = MaterialTheme.colorScheme.surface,
-        tonalElevation = 0.dp,
-    ) {
-        NavigationBarItem(
-            selected = true,
-            onClick = {},
-            icon = { Icon(Icons.Outlined.Home, contentDescription = null) },
-            label = { Text("Home") },
-            colors = residentNavigationColors(),
-        )
-        NavigationBarItem(
-            selected = false,
-            onClick = {},
-            icon = { Icon(Icons.AutoMirrored.Outlined.ReceiptLong, contentDescription = null) },
-            label = { Text("Requests") },
-            colors = residentNavigationColors(),
-        )
-        NavigationBarItem(
-            selected = false,
-            onClick = {},
-            icon = { Icon(Icons.Outlined.PersonOutline, contentDescription = null) },
-            label = { Text("Profile") },
-            colors = residentNavigationColors(),
-        )
-    }
-}
-
-@Composable
-private fun residentNavigationColors() = NavigationBarItemDefaults.colors(
-    selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
-    selectedTextColor = MaterialTheme.colorScheme.onSurface,
-    indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
-    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-)
 
 @Preview(showBackground = true, widthDp = 393, heightDp = 852)
 @Composable

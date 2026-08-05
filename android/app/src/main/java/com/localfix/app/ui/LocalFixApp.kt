@@ -1,18 +1,35 @@
 package com.localfix.app.ui
 
 import androidx.compose.runtime.Composable
-import com.localfix.app.ui.home.ResidentHomeScreen
-import com.localfix.app.ui.home.ResidentHomeUiState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import com.localfix.app.ui.navigation.ResidentNavigation
+import com.localfix.app.ui.role.RoleSelectionScreen
+import com.localfix.app.ui.role.RoleWorkspaceScreen
+import com.localfix.app.ui.session.AppRole
 import com.localfix.app.ui.theme.LocalFixTheme
 
 @Composable
 fun LocalFixApp() {
+    var activeRoleName by rememberSaveable { mutableStateOf<String?>(null) }
+    val activeRole = activeRoleName?.let(AppRole::valueOf)
+
     LocalFixTheme {
-        ResidentHomeScreen(
-            uiState = ResidentHomeUiState.sample,
-            onReportIssue = {},
-            onRequestClick = {},
-            onCategoryClick = {},
-        )
+        when (activeRole) {
+            null -> RoleSelectionScreen(
+                onRoleSelected = { role -> activeRoleName = role.name },
+            )
+            AppRole.RESIDENT -> ResidentNavigation(
+                onSwitchRole = { activeRoleName = null },
+            )
+            AppRole.MANAGER,
+            AppRole.WORKER,
+            -> RoleWorkspaceScreen(
+                role = activeRole,
+                onSwitchRole = { activeRoleName = null },
+            )
+        }
     }
 }
