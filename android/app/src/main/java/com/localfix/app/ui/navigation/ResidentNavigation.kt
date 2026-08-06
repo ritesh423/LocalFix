@@ -27,6 +27,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.localfix.app.data.draft.RequestDraftRepository
 import com.localfix.app.data.resident.ResidentRepository
 import com.localfix.app.data.model.ServiceCategory
 import com.localfix.app.ui.create.CreateRequestScreen
@@ -39,11 +40,12 @@ import com.localfix.app.ui.resident.ResidentViewModel
 @Composable
 fun ResidentNavigation(
     repository: ResidentRepository,
+    requestDraftRepository: RequestDraftRepository,
     onSwitchRole: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val residentViewModel: ResidentViewModel = viewModel(
-        factory = ResidentViewModel.factory(repository),
+        factory = ResidentViewModel.factory(repository, requestDraftRepository),
     )
     val uiState by residentViewModel.uiState.collectAsStateWithLifecycle()
     val createRequestState by residentViewModel.createRequestState.collectAsStateWithLifecycle()

@@ -7,7 +7,11 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTextInput
-import com.localfix.app.data.DefaultAppContainer
+import com.localfix.app.data.AppContainer
+import com.localfix.app.data.draft.InMemoryRequestDraftRepository
+import com.localfix.app.data.draft.RequestDraftRepository
+import com.localfix.app.data.resident.ResidentRepository
+import com.localfix.app.data.resident.SampleResidentRepository
 import org.junit.Rule
 import org.junit.Test
 
@@ -18,7 +22,7 @@ class LocalFixNavigationTest {
     @Test
     fun residentCanMoveBetweenMainDestinationsAndSwitchWorkspace() {
         composeRule.setContent {
-            LocalFixApp(DefaultAppContainer())
+            LocalFixApp(testAppContainer())
         }
 
         composeRule.onNodeWithText("Choose your workspace").assertIsDisplayed()
@@ -47,5 +51,11 @@ class LocalFixNavigationTest {
         composeRule.onNodeWithText("Switch workspace").performClick()
 
         composeRule.onNodeWithText("Choose your workspace").assertIsDisplayed()
+    }
+
+    private fun testAppContainer(): AppContainer = object : AppContainer {
+        override val residentRepository: ResidentRepository = SampleResidentRepository()
+        override val requestDraftRepository: RequestDraftRepository =
+            InMemoryRequestDraftRepository()
     }
 }

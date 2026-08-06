@@ -24,6 +24,7 @@ fun LocalFixApp(appContainer: AppContainer) {
             )
             AppRole.RESIDENT -> ResidentNavigation(
                 repository = appContainer.residentRepository,
+                requestDraftRepository = appContainer.requestDraftRepository,
                 onSwitchRole = { activeRoleName = null },
             )
             AppRole.MANAGER,

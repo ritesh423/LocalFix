@@ -1,11 +1,16 @@
 package com.localfix.app.ui.resident
 
+import com.localfix.app.data.draft.InMemoryRequestDraftRepository
+import com.localfix.app.data.model.AccessWindow
+import com.localfix.app.data.model.SavedRequestDraft
+import com.localfix.app.data.model.UrgencySuggestion
 import com.localfix.app.data.resident.SampleResidentRepository
 import com.localfix.app.data.model.ServiceCategory
 import com.localfix.app.data.model.TicketStatus
 import com.localfix.app.testing.MainDispatcherRule
 import com.localfix.app.ui.requests.RequestFilter
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -19,7 +24,7 @@ class ResidentViewModelTest {
 
     @Test
     fun repositoryDataIsMappedForEveryResidentDestination() = runTest {
-        val viewModel = ResidentViewModel(SampleResidentRepository())
+        val viewModel = createViewModel()
 
         advanceUntilIdle()
 
@@ -30,7 +35,7 @@ class ResidentViewModelTest {
 
     @Test
     fun completedFilterKeepsOnlyCompletedRequests() = runTest {
-        val viewModel = ResidentViewModel(SampleResidentRepository())
+        val viewModel = createViewModel()
 
         viewModel.selectRequestFilter(RequestFilter.COMPLETED)
         advanceUntilIdle()
@@ -44,7 +49,7 @@ class ResidentViewModelTest {
 
     @Test
     fun activeFilterExcludesClosedRequests() = runTest {
-        val viewModel = ResidentViewModel(SampleResidentRepository())
+        val viewModel = createViewModel()
 
         viewModel.selectRequestFilter(RequestFilter.ACTIVE)
         advanceUntilIdle()
@@ -57,7 +62,7 @@ class ResidentViewModelTest {
 
     @Test
     fun emptyDraftShowsRequiredFieldErrors() = runTest {
-        val viewModel = ResidentViewModel(SampleResidentRepository())
+        val viewModel = createViewModel()
 
         viewModel.submitRequestDraft()
 
@@ -69,7 +74,8 @@ class ResidentViewModelTest {
     @Test
     fun validDraftCreatesAnOpenRequest() = runTest {
         val repository = SampleResidentRepository()
-        val viewModel = ResidentViewModel(repository)
+        val draftRepository = InMemoryRequestDraftRepository()
+        val viewModel = ResidentViewModel(repository, draftRepository)
 
         viewModel.updateDraftCategory(ServiceCategory.PLUMBING)
         viewModel.updateDraftTitle("Water dripping below sink")
@@ -81,5 +87,67 @@ class ResidentViewModelTest {
         assertEquals(TicketStatus.OPEN, repository.residentData.value.requests.first().status)
         assertEquals("Water dripping below sink", repository.residentData.value.requests.first().title)
         assertEquals("LF-1043", viewModel.createRequestState.value.submittedRequestId)
+        assertEquals(null, draftRepository.observeDraft().first())
     }
+
+    @Test
+    fun savedDraftIsRestoredWhenViewModelStarts() = runTest {
+        val savedDraft = SavedRequestDraft(
+            category = ServiceCategory.ELECTRICAL,
+            title = "Bedroom switch sparks",
+            description = "A small spark appears whenever the bedroom switch is used.",
+            urgencySuggestion = UrgencySuggestion.SOON,
+            accessWindow = AccessWindow.EVENING,
+        )
+        val viewModel = ResidentViewModel(
+            SampleResidentRepository(),
+            InMemoryRequestDraftRepository(savedDraft),
+        )
+
+        advanceUntilIdle()
+
+        assertEquals(savedDraft.title, viewModel.createRequestState.value.draft.title)
+        assertEquals(savedDraft.category, viewModel.createRequestState.value.draft.category)
+        assertEquals(savedDraft.accessWindow, viewModel.createRequestState.value.draft.accessWindow)
+    }
+
+    @Test
+    fun editingDraftAutosavesLatestValues() = runTest {
+        val draftRepository = InMemoryRequestDraftRepository()
+        val viewModel = ResidentViewModel(SampleResidentRepository(), draftRepository)
+
+        viewModel.updateDraftCategory(ServiceCategory.APPLIANCE)
+        viewModel.updateDraftTitle("Fridge is making noise")
+        advanceUntilIdle()
+
+        val savedDraft = draftRepository.observeDraft().first()
+        assertEquals(ServiceCategory.APPLIANCE, savedDraft?.category)
+        assertEquals("Fridge is making noise", savedDraft?.title)
+    }
+
+    @Test
+    fun discardingDraftClearsSavedCopy() = runTest {
+        val draftRepository = InMemoryRequestDraftRepository(
+            SavedRequestDraft(
+                category = ServiceCategory.PLUMBING,
+                title = "Leaking tap",
+                description = "The bathroom tap continues dripping overnight.",
+                urgencySuggestion = UrgencySuggestion.ROUTINE,
+                accessWindow = AccessWindow.ANYTIME,
+            ),
+        )
+        val viewModel = ResidentViewModel(SampleResidentRepository(), draftRepository)
+        advanceUntilIdle()
+
+        viewModel.discardRequestDraft()
+        advanceUntilIdle()
+
+        assertEquals(null, draftRepository.observeDraft().first())
+        assertEquals("", viewModel.createRequestState.value.draft.title)
+    }
+
+    private fun createViewModel(): ResidentViewModel = ResidentViewModel(
+        SampleResidentRepository(),
+        InMemoryRequestDraftRepository(),
+    )
 }

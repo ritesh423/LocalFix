@@ -8,7 +8,7 @@ calls and chat threads into assigned, traceable jobs.
 
 **Current:** Stage 2 - Resident ticket vertical slice
 
-**Latest session:** Stage 2, Session 1 - Request Creation and Draft State
+**Latest session:** Stage 2, Session 2 - Durable Request Drafts with Room
 
 Development sessions use this format:
 

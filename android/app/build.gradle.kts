@@ -1,6 +1,8 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.ksp)
+    alias(libs.plugins.room)
 }
 
 android {
@@ -52,12 +54,21 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+
+    ksp(libs.androidx.room.compiler)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.test.espresso.core)
     androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.room.testing)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.junit)
+}
+
+room {
+    schemaDirectory("$projectDir/schemas")
 }

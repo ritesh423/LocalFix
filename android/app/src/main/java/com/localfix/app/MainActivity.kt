@@ -10,7 +10,9 @@ import com.localfix.app.data.DefaultAppContainer
 import com.localfix.app.ui.LocalFixApp
 
 class MainActivity : ComponentActivity() {
-    private val appContainer = DefaultAppContainer()
+    private val appContainer by lazy {
+        DefaultAppContainer(applicationContext)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
