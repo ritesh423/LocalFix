@@ -80,12 +80,17 @@ class ResidentViewModelTest {
         viewModel.updateDraftCategory(ServiceCategory.PLUMBING)
         viewModel.updateDraftTitle("Water dripping below sink")
         viewModel.updateDraftDescription("Water collects below the kitchen sink after using the tap.")
+        viewModel.updateDraftPhoto("content://localfix/photo/kitchen-sink")
         viewModel.submitRequestDraft()
         advanceUntilIdle()
 
         assertEquals(4, repository.residentData.value.requests.size)
         assertEquals(TicketStatus.OPEN, repository.residentData.value.requests.first().status)
         assertEquals("Water dripping below sink", repository.residentData.value.requests.first().title)
+        assertEquals(
+            "content://localfix/photo/kitchen-sink",
+            repository.residentData.value.requests.first().photoUri,
+        )
         assertEquals("LF-1043", viewModel.createRequestState.value.submittedRequestId)
         assertEquals(null, draftRepository.observeDraft().first())
     }
@@ -98,6 +103,7 @@ class ResidentViewModelTest {
             description = "A small spark appears whenever the bedroom switch is used.",
             urgencySuggestion = UrgencySuggestion.SOON,
             accessWindow = AccessWindow.EVENING,
+            photoUri = "content://localfix/photo/bedroom-switch",
         )
         val viewModel = ResidentViewModel(
             SampleResidentRepository(),
@@ -109,6 +115,7 @@ class ResidentViewModelTest {
         assertEquals(savedDraft.title, viewModel.createRequestState.value.draft.title)
         assertEquals(savedDraft.category, viewModel.createRequestState.value.draft.category)
         assertEquals(savedDraft.accessWindow, viewModel.createRequestState.value.draft.accessWindow)
+        assertEquals(savedDraft.photoUri, viewModel.createRequestState.value.draft.photoUri)
     }
 
     @Test
@@ -144,6 +151,20 @@ class ResidentViewModelTest {
 
         assertEquals(null, draftRepository.observeDraft().first())
         assertEquals("", viewModel.createRequestState.value.draft.title)
+    }
+
+    @Test
+    fun removingPhotoUpdatesScreenStateAndSavedDraft() = runTest {
+        val draftRepository = InMemoryRequestDraftRepository()
+        val viewModel = ResidentViewModel(SampleResidentRepository(), draftRepository)
+        viewModel.updateDraftPhoto("content://localfix/photo/leaking-tap")
+        advanceUntilIdle()
+
+        viewModel.removeDraftPhoto()
+        advanceUntilIdle()
+
+        assertEquals(null, viewModel.createRequestState.value.draft.photoUri)
+        assertEquals(null, draftRepository.observeDraft().first()?.photoUri)
     }
 
     private fun createViewModel(): ResidentViewModel = ResidentViewModel(

@@ -6,4 +6,5 @@ data class SavedRequestDraft(
     val description: String,
     val urgencySuggestion: UrgencySuggestion,
     val accessWindow: AccessWindow,
+    val photoUri: String? = null,
 )

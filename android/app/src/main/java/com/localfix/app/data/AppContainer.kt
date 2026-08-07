@@ -5,6 +5,7 @@ import androidx.room.Room
 import com.localfix.app.data.draft.RequestDraftRepository
 import com.localfix.app.data.draft.RoomRequestDraftRepository
 import com.localfix.app.data.local.LocalFixDatabase
+import com.localfix.app.data.local.MIGRATION_1_2
 import com.localfix.app.data.resident.ResidentRepository
 import com.localfix.app.data.resident.SampleResidentRepository
 
@@ -18,7 +19,8 @@ class DefaultAppContainer(context: Context) : AppContainer {
         context,
         LocalFixDatabase::class.java,
         "localfix.db",
-    ).build()
+    ).addMigrations(MIGRATION_1_2)
+        .build()
 
     override val residentRepository: ResidentRepository = SampleResidentRepository()
     override val requestDraftRepository: RequestDraftRepository =

@@ -14,6 +14,7 @@ data class RequestDraftEntity(
     val description: String,
     val urgencySuggestion: UrgencySuggestion,
     val accessWindow: AccessWindow,
+    val photoUri: String? = null,
 )
 
 const val CURRENT_DRAFT_ID = 1

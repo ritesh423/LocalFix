@@ -24,6 +24,7 @@ data class MaintenanceRequest(
     val accessWindow: AccessWindow,
     val assignedWorker: String,
     val updatedLabel: String,
+    val photoUri: String? = null,
 )
 
 data class NewMaintenanceRequest(
@@ -32,6 +33,7 @@ data class NewMaintenanceRequest(
     val category: ServiceCategory,
     val urgencySuggestion: UrgencySuggestion,
     val accessWindow: AccessWindow,
+    val photoUri: String? = null,
 )
 
 enum class ServiceCategory(val label: String) {

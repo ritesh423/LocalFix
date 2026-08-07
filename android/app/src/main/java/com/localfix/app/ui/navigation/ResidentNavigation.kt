@@ -147,6 +147,9 @@ fun ResidentNavigation(
                     onDescriptionChanged = residentViewModel::updateDraftDescription,
                     onUrgencySelected = residentViewModel::updateDraftUrgency,
                     onAccessWindowSelected = residentViewModel::updateDraftAccessWindow,
+                    onPhotoSelected = residentViewModel::updateDraftPhoto,
+                    onPhotoRemoved = residentViewModel::removeDraftPhoto,
+                    onPhotoSelectionFailed = residentViewModel::reportPhotoSelectionFailure,
                     onSubmit = residentViewModel::submitRequestDraft,
                 )
             }

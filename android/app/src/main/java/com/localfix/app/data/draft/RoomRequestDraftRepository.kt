@@ -28,6 +28,7 @@ private fun RequestDraftEntity.toModel(): SavedRequestDraft = SavedRequestDraft(
     description = description,
     urgencySuggestion = urgencySuggestion,
     accessWindow = accessWindow,
+    photoUri = photoUri,
 )
 
 private fun SavedRequestDraft.toEntity(): RequestDraftEntity = RequestDraftEntity(
@@ -36,4 +37,5 @@ private fun SavedRequestDraft.toEntity(): RequestDraftEntity = RequestDraftEntit
     description = description,
     urgencySuggestion = urgencySuggestion,
     accessWindow = accessWindow,
+    photoUri = photoUri,
 )

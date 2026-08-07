@@ -1,6 +1,13 @@
 package com.localfix.app.ui.create
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -16,9 +23,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.AddPhotoAlternate
+import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
@@ -26,6 +36,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -33,10 +44,14 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import coil3.compose.AsyncImage
 import com.localfix.app.data.model.AccessWindow
 import com.localfix.app.data.model.ServiceCategory
 import com.localfix.app.data.model.UrgencySuggestion
@@ -54,10 +69,27 @@ fun CreateRequestScreen(
     onDescriptionChanged: (String) -> Unit,
     onUrgencySelected: (UrgencySuggestion) -> Unit,
     onAccessWindowSelected: (AccessWindow) -> Unit,
+    onPhotoSelected: (String) -> Unit,
+    onPhotoRemoved: () -> Unit,
+    onPhotoSelectionFailed: () -> Unit,
     onSubmit: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     BackHandler(onBack = onBack)
+    val context = LocalContext.current
+    val photoPicker = rememberLauncherForActivityResult(PickVisualMedia()) { uri ->
+        if (uri != null) {
+            val previousPhotoUri = uiState.draft.photoUri
+            if (persistPhotoAccess(context, uri)) {
+                onPhotoSelected(uri.toString())
+                if (previousPhotoUri != null && previousPhotoUri != uri.toString()) {
+                    releasePhotoAccess(context, previousPhotoUri)
+                }
+            } else {
+                onPhotoSelectionFailed()
+            }
+        }
+    }
 
     LazyColumn(
         modifier = modifier
@@ -127,6 +159,24 @@ fun CreateRequestScreen(
                     ),
                     minLines = 4,
                     maxLines = 6,
+                )
+            }
+        }
+        item {
+            FormSection(
+                title = "Add a photo",
+                supportingText = "A clear photo helps the maintenance team prepare before arrival.",
+            ) {
+                PhotoEvidencePicker(
+                    photoUri = uiState.draft.photoUri,
+                    error = uiState.photoError,
+                    onChoosePhoto = {
+                        photoPicker.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly))
+                    },
+                    onRemovePhoto = {
+                        uiState.draft.photoUri?.let { uri -> releasePhotoAccess(context, uri) }
+                        onPhotoRemoved()
+                    },
                 )
             }
         }
@@ -210,19 +260,140 @@ fun CreateRequestScreen(
                     }
                 }
                 TextButton(
-                    onClick = onDiscard,
+                    onClick = {
+                        uiState.draft.photoUri?.let { uri -> releasePhotoAccess(context, uri) }
+                        onDiscard()
+                    },
                     modifier = Modifier.align(Alignment.CenterHorizontally),
                 ) {
                     Text("Discard draft")
                 }
                 Text(
-                    text = "Your draft is kept if you go back during this app session.",
+                    text = "Your draft and selected photo are saved automatically.",
                     modifier = Modifier.align(Alignment.CenterHorizontally),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun PhotoEvidencePicker(
+    photoUri: String?,
+    error: String?,
+    onChoosePhoto: () -> Unit,
+    onRemovePhoto: () -> Unit,
+) {
+    if (photoUri == null) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(LocalFixRadius.large),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        ) {
+            Column(
+                modifier = Modifier.padding(LocalFixSpacing.large),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Surface(
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    shape = CircleShape,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.AddPhotoAlternate,
+                        contentDescription = null,
+                        modifier = Modifier.padding(LocalFixSpacing.small),
+                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                    )
+                }
+                Spacer(modifier = Modifier.height(LocalFixSpacing.small))
+                Text(
+                    text = "Show the issue clearly",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    text = "Choose one photo from this device.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(modifier = Modifier.height(LocalFixSpacing.medium))
+                OutlinedButton(
+                    onClick = onChoosePhoto,
+                    modifier = Modifier.testTag("choose-request-photo"),
+                ) {
+                    Text("Choose photo")
+                }
+            }
+        }
+    } else {
+        Column {
+            AsyncImage(
+                model = Uri.parse(photoUri),
+                contentDescription = "Selected maintenance photo",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(190.dp)
+                    .clip(RoundedCornerShape(LocalFixRadius.large))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .testTag("request-photo-preview"),
+                contentScale = ContentScale.Crop,
+            )
+            Spacer(modifier = Modifier.height(LocalFixSpacing.small))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Photo attached",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        text = "Saved with this draft",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                TextButton(
+                    onClick = onChoosePhoto,
+                    modifier = Modifier.testTag("replace-request-photo"),
+                ) {
+                    Text("Replace")
+                }
+                IconButton(
+                    onClick = onRemovePhoto,
+                    modifier = Modifier.testTag("remove-request-photo"),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.DeleteOutline,
+                        contentDescription = "Remove photo",
+                    )
+                }
+            }
+        }
+    }
+
+    error?.let { message ->
+        Spacer(modifier = Modifier.height(LocalFixSpacing.small))
+        FormError(message)
+    }
+}
+
+private fun persistPhotoAccess(context: Context, uri: Uri): Boolean = runCatching {
+    context.contentResolver.takePersistableUriPermission(
+        uri,
+        Intent.FLAG_GRANT_READ_URI_PERMISSION,
+    )
+}.isSuccess
+
+private fun releasePhotoAccess(context: Context, photoUri: String) {
+    runCatching {
+        context.contentResolver.releasePersistableUriPermission(
+            Uri.parse(photoUri),
+            Intent.FLAG_GRANT_READ_URI_PERMISSION,
+        )
     }
 }
 
@@ -357,6 +528,9 @@ private fun CreateRequestPreview() {
             onDescriptionChanged = {},
             onUrgencySelected = {},
             onAccessWindowSelected = {},
+            onPhotoSelected = {},
+            onPhotoRemoved = {},
+            onPhotoSelectionFailed = {},
             onSubmit = {},
         )
     }

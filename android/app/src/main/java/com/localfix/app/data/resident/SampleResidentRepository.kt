@@ -74,6 +74,7 @@ class SampleResidentRepository : ResidentRepository {
             status = TicketStatus.OPEN,
             urgencySuggestion = request.urgencySuggestion,
             accessWindow = request.accessWindow,
+            photoUri = request.photoUri,
             assignedWorker = "Awaiting assignment",
             updatedLabel = "Created just now",
         )

@@ -10,6 +10,7 @@ data class CreateRequestUiState(
     val isSubmitting: Boolean = false,
     val submissionError: String? = null,
     val submittedRequestId: String? = null,
+    val photoError: String? = null,
 )
 
 data class RequestDraft(
@@ -18,6 +19,7 @@ data class RequestDraft(
     val description: String = "",
     val urgencySuggestion: UrgencySuggestion = UrgencySuggestion.ROUTINE,
     val accessWindow: AccessWindow = AccessWindow.ANYTIME,
+    val photoUri: String? = null,
 )
 
 data class RequestDraftErrors(

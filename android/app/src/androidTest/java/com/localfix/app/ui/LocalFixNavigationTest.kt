@@ -36,7 +36,7 @@ class LocalFixNavigationTest {
         composeRule.onNodeWithTag("request-description").performTextInput(
             "Water collects below the kitchen sink after using the tap.",
         )
-        composeRule.onNodeWithTag("create-request-list").performScrollToIndex(5)
+        composeRule.onNodeWithTag("create-request-list").performScrollToIndex(6)
         composeRule.onNodeWithTag("submit-request").performClick()
         composeRule.onNodeWithText("My requests").assertIsDisplayed()
         composeRule.onNodeWithText("Water dripping below sink").assertIsDisplayed()

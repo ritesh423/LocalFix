@@ -29,6 +29,7 @@ class RequestDraftDatabaseTest {
                 description = "The hallway light flickers for several seconds after switching on.",
                 urgencySuggestion = UrgencySuggestion.SOON,
                 accessWindow = AccessWindow.EVENING,
+                photoUri = "content://localfix/photo/hallway-light",
             ),
         )
         firstDatabase.close()
@@ -42,6 +43,7 @@ class RequestDraftDatabaseTest {
             val restoredDraft = reopenedDatabase.requestDraftDao().observeDraft().first()
             assertEquals("Hallway light flickers", restoredDraft?.title)
             assertEquals(ServiceCategory.ELECTRICAL, restoredDraft?.category)
+            assertEquals("content://localfix/photo/hallway-light", restoredDraft?.photoUri)
 
             reopenedDatabase.requestDraftDao().clearDraft()
             assertEquals(null, reopenedDatabase.requestDraftDao().observeDraft().first())

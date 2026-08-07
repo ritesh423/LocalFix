@@ -122,6 +122,34 @@ class ResidentViewModel(
         }
     }
 
+    fun updateDraftPhoto(photoUri: String) {
+        if (photoUri.isBlank()) {
+            reportPhotoSelectionFailure()
+            return
+        }
+        updateDraft { state ->
+            state.copy(
+                draft = state.draft.copy(photoUri = photoUri),
+                photoError = null,
+            )
+        }
+    }
+
+    fun removeDraftPhoto() {
+        updateDraft { state ->
+            state.copy(
+                draft = state.draft.copy(photoUri = null),
+                photoError = null,
+            )
+        }
+    }
+
+    fun reportPhotoSelectionFailure() {
+        mutableCreateRequestState.update { state ->
+            state.copy(photoError = "Couldn't keep access to that photo. Choose another one.")
+        }
+    }
+
     fun submitRequestDraft() {
         val draft = mutableCreateRequestState.value.draft
         val errors = draft.validate()
@@ -196,6 +224,7 @@ private fun SavedRequestDraft.toRequestDraft(): RequestDraft = RequestDraft(
     description = description,
     urgencySuggestion = urgencySuggestion,
     accessWindow = accessWindow,
+    photoUri = photoUri,
 )
 
 private fun RequestDraft.toSavedDraft(): SavedRequestDraft = SavedRequestDraft(
@@ -204,6 +233,7 @@ private fun RequestDraft.toSavedDraft(): SavedRequestDraft = SavedRequestDraft(
     description = description,
     urgencySuggestion = urgencySuggestion,
     accessWindow = accessWindow,
+    photoUri = photoUri,
 )
 
 private fun RequestDraft.validate(): RequestDraftErrors = RequestDraftErrors(
@@ -222,6 +252,7 @@ private fun RequestDraft.toNewRequest(): NewMaintenanceRequest = NewMaintenanceR
     category = requireNotNull(category),
     urgencySuggestion = urgencySuggestion,
     accessWindow = accessWindow,
+    photoUri = photoUri,
 )
 
 data class ResidentUiState(
