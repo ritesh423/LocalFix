@@ -8,7 +8,7 @@ calls and chat threads into assigned, traceable jobs.
 
 **Current:** Stage 2 - Resident ticket vertical slice
 
-**Latest session:** Stage 2, Session 5 - FastAPI Request Foundation
+**Latest session:** Stage 2, Session 6 - Durable SQL Ticket Persistence
 
 Development sessions use this format:
 
@@ -64,11 +64,16 @@ From the repository root on macOS:
 cd backend
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements-dev.txt
+.venv/bin/alembic upgrade head
 .venv/bin/uvicorn app.main:app --reload
 ```
 
 The API runs at `http://127.0.0.1:8000`. FastAPI's interactive API page is at
 `http://127.0.0.1:8000/docs`.
+
+The zero-setup development database is `backend/localfix.db`, which is ignored
+by Git. Set `DATABASE_URL` to a `postgresql+psycopg://...` connection string to
+use PostgreSQL with the same SQLAlchemy repository and Alembic migration.
 
 Run all backend tests and code checks with:
 

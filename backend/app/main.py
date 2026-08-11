@@ -3,18 +3,23 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.api.routes.tickets import router as tickets_router
-from app.repositories.tickets import InMemoryTicketRepository, TicketRepository
+from app.database.config import get_database_url
+from app.database.session import create_database_engine, create_session_factory
+from app.repositories.sqlalchemy_tickets import SqlAlchemyTicketRepository
+from app.repositories.tickets import TicketRepository
 
 
 def create_app(repository: TicketRepository | None = None) -> FastAPI:
     application = FastAPI(
         title="LocalFix API",
-        version="0.1.0",
+        version="0.2.0",
         description="Apartment maintenance workflow API.",
     )
-    application.state.ticket_repository = (
-        repository if repository is not None else InMemoryTicketRepository()
-    )
+    if repository is None:
+        engine = create_database_engine(get_database_url())
+        application.state.database_engine = engine
+        repository = SqlAlchemyTicketRepository(create_session_factory(engine))
+    application.state.ticket_repository = repository
     application.include_router(tickets_router)
 
     @application.exception_handler(RequestValidationError)

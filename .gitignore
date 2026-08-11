@@ -16,6 +16,9 @@ captures/
 __pycache__/
 *.py[cod]
 .venv/
+*.db
+*.sqlite
+*.sqlite3
 
 # Environment and credentials
 .env
