@@ -8,7 +8,7 @@ calls and chat threads into assigned, traceable jobs.
 
 **Current:** Stage 2 - Resident ticket vertical slice
 
-**Latest session:** Stage 2, Session 4 - Resident Request Details
+**Latest session:** Stage 2, Session 5 - FastAPI Request Foundation
 
 Development sessions use this format:
 
@@ -54,3 +54,27 @@ current boundaries and open decisions.
 - `docs/LEARNING_LOG.md` - personalized explanation record
 - `docs/sessions/` - outcome and decisions from every build session
 - `android/` - Kotlin and Jetpack Compose application
+- `backend/` - FastAPI application, domain rules, repositories, and API tests
+
+## Run the backend locally
+
+From the repository root on macOS:
+
+```shell
+cd backend
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements-dev.txt
+.venv/bin/uvicorn app.main:app --reload
+```
+
+The API runs at `http://127.0.0.1:8000`. FastAPI's interactive API page is at
+`http://127.0.0.1:8000/docs`.
+
+Run all backend tests and code checks with:
+
+```shell
+cd backend
+.venv/bin/python -m unittest discover -s tests -v
+.venv/bin/ruff check app tests
+.venv/bin/ruff format --check app tests
+```
