@@ -25,11 +25,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.localfix.app.ui.components.LocalFixScreenHeader
+import com.localfix.app.ui.components.RequestStatusBadge
 import com.localfix.app.ui.theme.LocalFixRadius
 import com.localfix.app.ui.theme.LocalFixSpacing
 import com.localfix.app.ui.theme.LocalFixTheme
@@ -140,7 +140,10 @@ private fun RequestCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.labelMedium,
                     )
-                    RequestStatusPill(request)
+                    RequestStatusBadge(
+                        label = request.statusLabel,
+                        tone = request.statusTone,
+                    )
                 }
                 Spacer(modifier = Modifier.height(LocalFixSpacing.small))
                 Text(
@@ -160,33 +163,6 @@ private fun RequestCard(
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-    }
-}
-
-@Composable
-private fun RequestStatusPill(request: ResidentRequestItem) {
-    val colors = when (request.statusTone) {
-        RequestStatusTone.ACTIVE -> LocalFixTheme.statusColors.activeContainer to
-            LocalFixTheme.statusColors.onActiveContainer
-        RequestStatusTone.ATTENTION -> LocalFixTheme.statusColors.attentionContainer to
-            LocalFixTheme.statusColors.onAttentionContainer
-        RequestStatusTone.COMPLETED -> MaterialTheme.colorScheme.primaryContainer to
-            MaterialTheme.colorScheme.onPrimaryContainer
-        RequestStatusTone.NEUTRAL -> MaterialTheme.colorScheme.surfaceVariant to
-            MaterialTheme.colorScheme.onSurfaceVariant
-    }
-
-    Surface(
-        color = colors.first,
-        contentColor = colors.second,
-        shape = RoundedCornerShape(LocalFixRadius.small),
-    ) {
-        Text(
-            text = request.statusLabel,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-            style = MaterialTheme.typography.labelMedium,
-            color = Color.Unspecified,
-        )
     }
 }
 

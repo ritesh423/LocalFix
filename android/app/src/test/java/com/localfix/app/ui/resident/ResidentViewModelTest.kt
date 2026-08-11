@@ -31,6 +31,14 @@ class ResidentViewModelTest {
         assertEquals("Lakeview Residency", viewModel.uiState.value.home.propertyName)
         assertEquals(3, viewModel.uiState.value.requests.requests.size)
         assertEquals("Ritesh", viewModel.uiState.value.profile.name)
+        assertEquals(
+            "Morning · 8 AM–12 PM",
+            viewModel.uiState.value.requestDetails["LF-1042"]?.accessWindowLabel,
+        )
+        assertEquals(
+            "The tap keeps dripping even when fully closed.",
+            viewModel.uiState.value.requestDetails["LF-1042"]?.description,
+        )
     }
 
     @Test
@@ -92,6 +100,10 @@ class ResidentViewModelTest {
             repository.residentData.value.requests.first().photoUri,
         )
         assertEquals("LF-1043", viewModel.createRequestState.value.submittedRequestId)
+        assertEquals(
+            "content://localfix/photo/kitchen-sink",
+            viewModel.uiState.value.requestDetails["LF-1043"]?.photoUri,
+        )
         assertEquals(null, draftRepository.observeDraft().first())
     }
 

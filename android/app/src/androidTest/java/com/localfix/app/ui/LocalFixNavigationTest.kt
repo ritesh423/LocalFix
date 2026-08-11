@@ -2,6 +2,7 @@ package com.localfix.app.ui
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -28,6 +29,12 @@ class LocalFixNavigationTest {
         composeRule.onNodeWithText("Choose your workspace").assertIsDisplayed()
         composeRule.onNodeWithText("Resident").performClick()
         composeRule.onNodeWithText("Your home, taken care of.").assertIsDisplayed()
+        composeRule.onNodeWithText("Leaking kitchen tap").performClick()
+        composeRule.onNodeWithText("The tap keeps dripping even when fully closed.")
+            .assertIsDisplayed()
+        composeRule.onNodeWithText("Morning · 8 AM–12 PM").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Back").performClick()
+        composeRule.onNodeWithText("Your home, taken care of.").assertIsDisplayed()
         composeRule.onNodeWithText("Report an issue").performClick()
         composeRule.onNodeWithText("Give the maintenance team enough detail to act quickly.")
             .assertIsDisplayed()
@@ -40,6 +47,12 @@ class LocalFixNavigationTest {
         composeRule.onNodeWithTag("submit-request").performClick()
         composeRule.onNodeWithText("My requests").assertIsDisplayed()
         composeRule.onNodeWithText("Water dripping below sink").assertIsDisplayed()
+        composeRule.onNodeWithText("Water dripping below sink").performClick()
+        composeRule.onNodeWithText(
+            "Water collects below the kitchen sink after using the tap.",
+        ).assertIsDisplayed()
+        composeRule.onNodeWithText("Awaiting assignment").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Back").performClick()
 
         composeRule.onNodeWithTag("resident-nav-resident/requests").performClick()
         composeRule.onNodeWithText("My requests").assertIsDisplayed()

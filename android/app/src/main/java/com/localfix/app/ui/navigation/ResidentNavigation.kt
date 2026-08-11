@@ -20,11 +20,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.navigation.NavDestination.Companion.hierarchy
+import androidx.navigation.NavType
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.localfix.app.data.draft.RequestDraftRepository
@@ -34,6 +36,7 @@ import com.localfix.app.ui.create.CreateRequestScreen
 import com.localfix.app.ui.home.ResidentHomeScreen
 import com.localfix.app.ui.home.ServiceCategoryType
 import com.localfix.app.ui.profile.ResidentProfileScreen
+import com.localfix.app.ui.requestdetail.ResidentRequestDetailScreen
 import com.localfix.app.ui.requests.ResidentRequestsScreen
 import com.localfix.app.ui.resident.ResidentViewModel
 
@@ -68,7 +71,7 @@ fun ResidentNavigation(
         modifier = modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
-            if (currentDestination?.route != CREATE_REQUEST_ROUTE) {
+            if (currentDestination?.route in MAIN_RESIDENT_ROUTES) {
                 NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                     ResidentDestination.entries.forEach { destination ->
                         NavigationBarItem(
@@ -109,8 +112,8 @@ fun ResidentNavigation(
                     onReportIssue = {
                         navController.navigate(CREATE_REQUEST_ROUTE)
                     },
-                    onRequestClick = {
-                        navController.navigate(ResidentDestination.REQUESTS.route)
+                    onRequestClick = { requestId ->
+                        navController.navigate(requestDetailRoute(requestId))
                     },
                     onCategoryClick = { category ->
                         residentViewModel.startRequestDraft(category.toDataCategory())
@@ -125,7 +128,9 @@ fun ResidentNavigation(
                     onReportIssue = {
                         navController.navigate(CREATE_REQUEST_ROUTE)
                     },
-                    onRequestClick = {},
+                    onRequestClick = { requestId ->
+                        navController.navigate(requestDetailRoute(requestId))
+                    },
                 )
             }
             composable(ResidentDestination.PROFILE.route) {
@@ -153,11 +158,27 @@ fun ResidentNavigation(
                     onSubmit = residentViewModel::submitRequestDraft,
                 )
             }
+            composable(
+                route = REQUEST_DETAIL_ROUTE,
+                arguments = listOf(
+                    navArgument(REQUEST_ID_ARGUMENT) { type = NavType.StringType },
+                ),
+            ) { backStackEntry ->
+                val requestId = backStackEntry.arguments?.getString(REQUEST_ID_ARGUMENT)
+                ResidentRequestDetailScreen(
+                    uiState = requestId?.let(uiState.requestDetails::get),
+                    onBack = { navController.popBackStack() },
+                )
+            }
         }
     }
 }
 
 private const val CREATE_REQUEST_ROUTE = "resident/requests/new"
+private const val REQUEST_ID_ARGUMENT = "requestId"
+private const val REQUEST_DETAIL_ROUTE = "resident/requests/{$REQUEST_ID_ARGUMENT}"
+
+private fun requestDetailRoute(requestId: String): String = "resident/requests/$requestId"
 
 private enum class ResidentDestination(
     val route: String,
@@ -168,6 +189,10 @@ private enum class ResidentDestination(
     REQUESTS("resident/requests", "Requests", Icons.AutoMirrored.Outlined.ReceiptLong),
     PROFILE("resident/profile", "Profile", Icons.Outlined.PersonOutline),
 }
+
+private val MAIN_RESIDENT_ROUTES = ResidentDestination.entries.map { destination ->
+    destination.route
+}.toSet()
 
 private fun ServiceCategoryType.toDataCategory(): ServiceCategory = when (this) {
     ServiceCategoryType.PLUMBING -> ServiceCategory.PLUMBING

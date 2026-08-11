@@ -7,6 +7,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.localfix.app.data.draft.RequestDraftRepository
 import com.localfix.app.data.model.ResidentData
+import com.localfix.app.data.model.MaintenanceRequest
 import com.localfix.app.data.model.NewMaintenanceRequest
 import com.localfix.app.data.model.SavedRequestDraft
 import com.localfix.app.data.model.AccessWindow
@@ -22,6 +23,7 @@ import com.localfix.app.ui.home.ResidentHomeUiState
 import com.localfix.app.ui.home.ServiceCategoryType
 import com.localfix.app.ui.home.ServiceCategory as ServiceCategoryItem
 import com.localfix.app.ui.profile.ResidentProfileUiState
+import com.localfix.app.ui.requestdetail.ResidentRequestDetailUiState
 import com.localfix.app.ui.requests.RequestFilter
 import com.localfix.app.ui.requests.RequestStatusTone
 import com.localfix.app.ui.requests.ResidentRequestItem
@@ -259,6 +261,7 @@ data class ResidentUiState(
     val home: ResidentHomeUiState,
     val requests: ResidentRequestsUiState,
     val profile: ResidentProfileUiState,
+    val requestDetails: Map<String, ResidentRequestDetailUiState>,
 )
 
 private fun createResidentUiState(
@@ -326,8 +329,26 @@ private fun createResidentUiState(
             phone = data.account.phone,
             email = data.account.email,
         ),
+        requestDetails = data.requests.associate { request ->
+            request.id to request.toDetailUiState()
+        },
     )
 }
+
+private fun MaintenanceRequest.toDetailUiState(): ResidentRequestDetailUiState =
+    ResidentRequestDetailUiState(
+        id = id,
+        title = title,
+        description = description,
+        categoryLabel = category.label,
+        statusLabel = status.label,
+        statusTone = status.tone,
+        urgencyLabel = urgencySuggestion.label,
+        accessWindowLabel = accessWindow.label,
+        assignedWorker = assignedWorker,
+        updatedLabel = updatedLabel,
+        photoUri = photoUri,
+    )
 
 private val terminalStatuses = setOf(
     TicketStatus.COMPLETED,
@@ -356,6 +377,21 @@ private val TicketStatus.tone: RequestStatusTone
         -> RequestStatusTone.ATTENTION
         TicketStatus.COMPLETED -> RequestStatusTone.COMPLETED
         TicketStatus.CANCELLED -> RequestStatusTone.NEUTRAL
+    }
+
+private val UrgencySuggestion.label: String
+    get() = when (this) {
+        UrgencySuggestion.ROUTINE -> "Routine"
+        UrgencySuggestion.SOON -> "Soon"
+        UrgencySuggestion.URGENT -> "Urgent"
+    }
+
+private val AccessWindow.label: String
+    get() = when (this) {
+        AccessWindow.ANYTIME -> "Any time today"
+        AccessWindow.MORNING -> "Morning · 8 AM–12 PM"
+        AccessWindow.AFTERNOON -> "Afternoon · 12–4 PM"
+        AccessWindow.EVENING -> "Evening · 4–8 PM"
     }
 
 private fun ServiceCategory.toUiType(): ServiceCategoryType = when (this) {
