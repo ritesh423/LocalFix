@@ -63,6 +63,7 @@ class SampleResidentRepository : ResidentRepository {
     )
 
     override val residentData: StateFlow<ResidentData> = data.asStateFlow()
+    override val requestSyncState = MutableStateFlow<RequestSyncState>(RequestSyncState.Ready)
 
     override suspend fun createRequest(request: NewMaintenanceRequest): String {
         val requestId = "LF-${nextRequestNumber++}"
@@ -83,4 +84,6 @@ class SampleResidentRepository : ResidentRepository {
         )
         return requestId
     }
+
+    override suspend fun refreshRequests() = Unit
 }

@@ -24,6 +24,7 @@ class RequestDraftDatabaseTest {
         ).build()
         firstDatabase.requestDraftDao().saveDraft(
             RequestDraftEntity(
+                clientRequestId = "50000000-0000-0000-0000-000000000001",
                 category = ServiceCategory.ELECTRICAL,
                 title = "Hallway light flickers",
                 description = "The hallway light flickers for several seconds after switching on.",
@@ -44,6 +45,10 @@ class RequestDraftDatabaseTest {
             assertEquals("Hallway light flickers", restoredDraft?.title)
             assertEquals(ServiceCategory.ELECTRICAL, restoredDraft?.category)
             assertEquals("content://localfix/photo/hallway-light", restoredDraft?.photoUri)
+            assertEquals(
+                "50000000-0000-0000-0000-000000000001",
+                restoredDraft?.clientRequestId,
+            )
 
             reopenedDatabase.requestDraftDao().clearDraft()
             assertEquals(null, reopenedDatabase.requestDraftDao().observeDraft().first())

@@ -110,6 +110,7 @@ class ResidentViewModelTest {
     @Test
     fun savedDraftIsRestoredWhenViewModelStarts() = runTest {
         val savedDraft = SavedRequestDraft(
+            clientRequestId = "50000000-0000-0000-0000-000000000002",
             category = ServiceCategory.ELECTRICAL,
             title = "Bedroom switch sparks",
             description = "A small spark appears whenever the bedroom switch is used.",
@@ -148,6 +149,7 @@ class ResidentViewModelTest {
     fun discardingDraftClearsSavedCopy() = runTest {
         val draftRepository = InMemoryRequestDraftRepository(
             SavedRequestDraft(
+                clientRequestId = "50000000-0000-0000-0000-000000000003",
                 category = ServiceCategory.PLUMBING,
                 title = "Leaking tap",
                 description = "The bathroom tap continues dripping overnight.",

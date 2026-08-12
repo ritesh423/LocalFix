@@ -4,6 +4,8 @@ data class ResidentRequestsUiState(
     val unitLabel: String,
     val selectedFilter: RequestFilter,
     val requests: List<ResidentRequestItem>,
+    val isLoading: Boolean = false,
+    val errorMessage: String? = null,
 ) {
     companion object {
         val sample = ResidentRequestsUiState(
@@ -41,6 +43,7 @@ data class ResidentRequestsUiState(
 
 data class ResidentRequestItem(
     val id: String,
+    val reference: String = id,
     val title: String,
     val category: String,
     val statusTone: RequestStatusTone,

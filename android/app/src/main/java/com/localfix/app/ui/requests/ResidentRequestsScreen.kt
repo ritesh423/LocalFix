@@ -30,6 +30,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.localfix.app.ui.components.LocalFixScreenHeader
 import com.localfix.app.ui.components.RequestStatusBadge
+import com.localfix.app.ui.components.RequestSyncNotice
 import com.localfix.app.ui.theme.LocalFixRadius
 import com.localfix.app.ui.theme.LocalFixSpacing
 import com.localfix.app.ui.theme.LocalFixTheme
@@ -40,6 +41,7 @@ fun ResidentRequestsScreen(
     onFilterSelected: (RequestFilter) -> Unit,
     onReportIssue: () -> Unit,
     onRequestClick: (String) -> Unit,
+    onRetryRequests: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(
@@ -93,6 +95,19 @@ fun ResidentRequestsScreen(
                 }
             }
         }
+        if (uiState.isLoading || uiState.errorMessage != null) {
+            item {
+                RequestSyncNotice(
+                    isLoading = uiState.isLoading,
+                    errorMessage = uiState.errorMessage,
+                    onRetry = onRetryRequests,
+                    modifier = Modifier.padding(
+                        horizontal = LocalFixSpacing.medium,
+                        vertical = LocalFixSpacing.small,
+                    ),
+                )
+            }
+        }
         items(
             items = uiState.requests,
             key = ResidentRequestItem::id,
@@ -136,7 +151,7 @@ private fun RequestCard(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = request.id,
+                        text = request.reference,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.labelMedium,
                     )
@@ -175,6 +190,7 @@ private fun ResidentRequestsPreview() {
             onFilterSelected = {},
             onReportIssue = {},
             onRequestClick = {},
+            onRetryRequests = {},
         )
     }
 }

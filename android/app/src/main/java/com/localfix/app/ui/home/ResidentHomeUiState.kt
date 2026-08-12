@@ -8,6 +8,8 @@ data class ResidentHomeUiState(
     val awaitingConfirmationCount: Int,
     val activeRequest: MaintenanceRequestSummary?,
     val categories: List<ServiceCategory>,
+    val isLoadingRequests: Boolean = false,
+    val requestErrorMessage: String? = null,
 ) {
     companion object {
         val sample = ResidentHomeUiState(
@@ -35,6 +37,7 @@ data class ResidentHomeUiState(
 
 data class MaintenanceRequestSummary(
     val id: String,
+    val reference: String = id,
     val title: String,
     val statusLabel: String,
     val assignedWorker: String,

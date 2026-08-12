@@ -119,6 +119,7 @@ fun ResidentNavigation(
                         residentViewModel.startRequestDraft(category.toDataCategory())
                         navController.navigate(CREATE_REQUEST_ROUTE)
                     },
+                    onRetryRequests = residentViewModel::refreshRequests,
                 )
             }
             composable(ResidentDestination.REQUESTS.route) {
@@ -131,6 +132,7 @@ fun ResidentNavigation(
                     onRequestClick = { requestId ->
                         navController.navigate(requestDetailRoute(requestId))
                     },
+                    onRetryRequests = residentViewModel::refreshRequests,
                 )
             }
             composable(ResidentDestination.PROFILE.route) {

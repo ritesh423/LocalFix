@@ -3,6 +3,7 @@ package com.localfix.app.ui.create
 import com.localfix.app.data.model.AccessWindow
 import com.localfix.app.data.model.ServiceCategory
 import com.localfix.app.data.model.UrgencySuggestion
+import java.util.UUID
 
 data class CreateRequestUiState(
     val draft: RequestDraft = RequestDraft(),
@@ -14,6 +15,7 @@ data class CreateRequestUiState(
 )
 
 data class RequestDraft(
+    val clientRequestId: String = UUID.randomUUID().toString(),
     val category: ServiceCategory? = null,
     val title: String = "",
     val description: String = "",

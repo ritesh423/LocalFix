@@ -9,6 +9,7 @@ import com.localfix.app.data.model.UrgencySuggestion
 @Entity(tableName = "request_drafts")
 data class RequestDraftEntity(
     @PrimaryKey val id: Int = CURRENT_DRAFT_ID,
+    val clientRequestId: String,
     val category: ServiceCategory?,
     val title: String,
     val description: String,

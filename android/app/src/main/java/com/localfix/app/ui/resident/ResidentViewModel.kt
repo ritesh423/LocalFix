@@ -15,6 +15,7 @@ import com.localfix.app.data.model.ServiceCategory
 import com.localfix.app.data.model.TicketStatus
 import com.localfix.app.data.model.UrgencySuggestion
 import com.localfix.app.data.resident.ResidentRepository
+import com.localfix.app.data.resident.RequestSyncState
 import com.localfix.app.ui.home.MaintenanceRequestSummary
 import com.localfix.app.ui.create.CreateRequestUiState
 import com.localfix.app.ui.create.RequestDraft
@@ -56,10 +57,12 @@ class ResidentViewModel(
                 }
             }
         }
+        refreshRequests()
     }
 
     val uiState = combine(
         repository.residentData,
+        repository.requestSyncState,
         selectedFilter,
         ::createResidentUiState,
     ).stateIn(
@@ -67,12 +70,19 @@ class ResidentViewModel(
         started = SharingStarted.Eagerly,
         initialValue = createResidentUiState(
             repository.residentData.value,
+            repository.requestSyncState.value,
             selectedFilter.value,
         ),
     )
 
     fun selectRequestFilter(filter: RequestFilter) {
         selectedFilter.value = filter
+    }
+
+    fun refreshRequests() {
+        viewModelScope.launch {
+            repository.refreshRequests()
+        }
     }
 
     fun startRequestDraft(category: ServiceCategory? = null) {
@@ -221,6 +231,7 @@ class ResidentViewModel(
 }
 
 private fun SavedRequestDraft.toRequestDraft(): RequestDraft = RequestDraft(
+    clientRequestId = clientRequestId,
     category = category,
     title = title,
     description = description,
@@ -230,6 +241,7 @@ private fun SavedRequestDraft.toRequestDraft(): RequestDraft = RequestDraft(
 )
 
 private fun RequestDraft.toSavedDraft(): SavedRequestDraft = SavedRequestDraft(
+    clientRequestId = clientRequestId,
     category = category,
     title = title,
     description = description,
@@ -249,6 +261,7 @@ private fun RequestDraft.validate(): RequestDraftErrors = RequestDraftErrors(
 )
 
 private fun RequestDraft.toNewRequest(): NewMaintenanceRequest = NewMaintenanceRequest(
+    clientRequestId = clientRequestId,
     title = title.trim(),
     description = description.trim(),
     category = requireNotNull(category),
@@ -266,6 +279,7 @@ data class ResidentUiState(
 
 private fun createResidentUiState(
     data: ResidentData,
+    requestSyncState: RequestSyncState,
     selectedFilter: RequestFilter,
 ): ResidentUiState {
     val visibleRequests = data.requests.filter { request ->
@@ -294,6 +308,7 @@ private fun createResidentUiState(
             activeRequest = activeRequest?.let { request ->
                 MaintenanceRequestSummary(
                     id = request.id,
+                    reference = request.reference,
                     title = request.title,
                     statusLabel = request.status.label,
                     assignedWorker = request.assignedWorker,
@@ -306,6 +321,8 @@ private fun createResidentUiState(
                     label = category.label,
                 )
             },
+            isLoadingRequests = requestSyncState is RequestSyncState.Loading,
+            requestErrorMessage = (requestSyncState as? RequestSyncState.Error)?.message,
         ),
         requests = ResidentRequestsUiState(
             unitLabel = data.account.unitLabel,
@@ -313,6 +330,7 @@ private fun createResidentUiState(
             requests = visibleRequests.map { request ->
                 ResidentRequestItem(
                     id = request.id,
+                    reference = request.reference,
                     title = request.title,
                     category = request.category.label,
                     statusTone = request.status.tone,
@@ -320,6 +338,8 @@ private fun createResidentUiState(
                     updatedLabel = request.updatedLabel,
                 )
             },
+            isLoading = requestSyncState is RequestSyncState.Loading,
+            errorMessage = (requestSyncState as? RequestSyncState.Error)?.message,
         ),
         profile = ResidentProfileUiState(
             name = data.account.name,
@@ -337,7 +357,7 @@ private fun createResidentUiState(
 
 private fun MaintenanceRequest.toDetailUiState(): ResidentRequestDetailUiState =
     ResidentRequestDetailUiState(
-        id = id,
+        id = reference,
         title = title,
         description = description,
         categoryLabel = category.label,
@@ -349,6 +369,9 @@ private fun MaintenanceRequest.toDetailUiState(): ResidentRequestDetailUiState =
         updatedLabel = updatedLabel,
         photoUri = photoUri,
     )
+
+private val MaintenanceRequest.reference: String
+    get() = if (id.startsWith("LF-")) id else "LF-${id.take(8).uppercase()}"
 
 private val terminalStatuses = setOf(
     TicketStatus.COMPLETED,

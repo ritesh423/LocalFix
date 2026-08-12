@@ -28,6 +28,7 @@ data class MaintenanceRequest(
 )
 
 data class NewMaintenanceRequest(
+    val clientRequestId: String,
     val title: String,
     val description: String,
     val category: ServiceCategory,

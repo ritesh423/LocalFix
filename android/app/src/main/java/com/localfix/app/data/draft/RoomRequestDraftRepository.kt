@@ -5,6 +5,7 @@ import com.localfix.app.data.local.RequestDraftEntity
 import com.localfix.app.data.model.SavedRequestDraft
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import java.util.UUID
 
 class RoomRequestDraftRepository(
     private val dao: RequestDraftDao,
@@ -23,6 +24,7 @@ class RoomRequestDraftRepository(
 }
 
 private fun RequestDraftEntity.toModel(): SavedRequestDraft = SavedRequestDraft(
+    clientRequestId = clientRequestId.ifBlank { UUID.randomUUID().toString() },
     category = category,
     title = title,
     description = description,
@@ -32,6 +34,7 @@ private fun RequestDraftEntity.toModel(): SavedRequestDraft = SavedRequestDraft(
 )
 
 private fun SavedRequestDraft.toEntity(): RequestDraftEntity = RequestDraftEntity(
+    clientRequestId = clientRequestId,
     category = category,
     title = title,
     description = description,

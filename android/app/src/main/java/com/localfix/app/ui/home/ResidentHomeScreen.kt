@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import com.localfix.app.ui.theme.LocalFixRadius
 import com.localfix.app.ui.theme.LocalFixSpacing
 import com.localfix.app.ui.theme.LocalFixTheme
+import com.localfix.app.ui.components.RequestSyncNotice
 
 @Composable
 fun ResidentHomeScreen(
@@ -53,6 +54,7 @@ fun ResidentHomeScreen(
     onReportIssue: () -> Unit,
     onRequestClick: (String) -> Unit,
     onCategoryClick: (ServiceCategoryType) -> Unit,
+    onRetryRequests: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(
@@ -77,6 +79,21 @@ fun ResidentHomeScreen(
                     vertical = LocalFixSpacing.large,
                 ),
             )
+        }
+
+        if (uiState.isLoadingRequests || uiState.requestErrorMessage != null) {
+            item {
+                RequestSyncNotice(
+                    isLoading = uiState.isLoadingRequests,
+                    errorMessage = uiState.requestErrorMessage,
+                    onRetry = onRetryRequests,
+                    modifier = Modifier.padding(
+                        start = LocalFixSpacing.medium,
+                        end = LocalFixSpacing.medium,
+                        bottom = LocalFixSpacing.large,
+                    ),
+                )
+            }
         }
 
         uiState.activeRequest?.let { request ->
@@ -367,7 +384,7 @@ private fun ActiveRequestCard(
                 }
                 Spacer(modifier = Modifier.weight(1f))
                 Text(
-                    text = request.id,
+                    text = request.reference,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.labelMedium,
                 )
@@ -466,6 +483,7 @@ private fun ResidentHomePreview() {
             onReportIssue = {},
             onRequestClick = {},
             onCategoryClick = {},
+            onRetryRequests = {},
         )
     }
 }

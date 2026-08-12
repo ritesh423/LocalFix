@@ -20,6 +20,7 @@ class ResidentHomeScreenTest {
                     onReportIssue = {},
                     onRequestClick = {},
                     onCategoryClick = {},
+                    onRetryRequests = {},
                 )
             }
         }
