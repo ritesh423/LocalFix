@@ -1,64 +1,72 @@
 # LocalFix
 
-LocalFix is an offline-first maintenance system for apartments, hostels, and
-small properties. It turns maintenance complaints that normally disappear in
-calls and chat threads into assigned, traceable jobs.
+LocalFix is an Android app for reporting and tracking maintenance problems in apartment buildings. It comes from a real problem I faced, and I could not find a simple local app built around this exact workflow.
 
-## Project status
+I started this project because of a problem I have seen in my own apartment. Most maintenance complaints are shared through phone calls, chat messages, or in-person conversations. It becomes difficult to know who is handling an issue, whether any progress has been made, or if the complaint was forgotten completely.
 
-**Current:** Stage 2 - Resident ticket vertical slice
+My plan is to first use LocalFix in my apartment and improve it based on feedback from actual residents and maintenance workers. Once it works well there, I want to test it in **10 more apartment communities** before thinking about scaling it further.
 
-**Latest session:** Stage 2, Session 6 - Durable SQL Ticket Persistence
+> **Current status:** The resident side is working from the Android app to the backend and database. The manager and maintenance-worker sides are still to be built.
 
-Development sessions use this format:
+## Resident experience
 
-> **Stage N · Session N - Feature or outcome**
+<table>
+  <tr>
+    <td align="center"><img src="assets/screenshots/resident-home.png" width="250" alt="LocalFix resident home screen"><br><strong>Resident home</strong></td>
+    <td align="center"><img src="assets/screenshots/resident-requests.png" width="250" alt="LocalFix resident requests screen"><br><strong>Request tracking</strong></td>
+    <td align="center"><img src="assets/screenshots/request-detail.png" width="250" alt="LocalFix request details screen"><br><strong>Request details</strong></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="assets/screenshots/create-request-details.png" width="250" alt="LocalFix request form details"><br><strong>Issue details</strong></td>
+    <td align="center"><img src="assets/screenshots/create-request-preferences.png" width="250" alt="LocalFix photo, urgency, and access-time form"><br><strong>Visit preferences</strong></td>
+    <td align="center"><img src="assets/screenshots/resident-profile.png" width="250" alt="LocalFix resident profile screen"><br><strong>Resident profile</strong></td>
+  </tr>
+  <tr>
+    <td colspan="3" align="center"><img src="assets/screenshots/splash.png" width="250" alt="LocalFix splash screen"><br><strong>Launch experience</strong></td>
+  </tr>
+</table>
 
-Each session has two parts:
+## What is working
 
-1. Implement one coherent outcome.
-2. Explain the implementation, then record which concepts are familiar,
-   partial, or new.
+- Residents can create a request with a category, title, description, urgency, preferred visit time, and a photo.
+- Unfinished requests are saved in Room, so the draft is still there after closing or restarting the app.
+- Requests are sent from the Android app to the FastAPI backend and saved in a SQL database.
+- Residents can see all their requests, filter them, and open a request to view its details.
+- Retrying a failed submission does not create the same request twice.
+- The app has proper loading, empty, error, and retry states for backend calls.
+- Pydantic validates incoming API data, while domain rules control which ticket status changes are allowed.
 
-## MVP workflow
+## Architecture
 
-1. A resident reports a maintenance issue with its category, urgency, photo,
-   and preferred access time.
-2. A manager reviews and assigns the ticket.
-3. A worker receives the job, including when connectivity is intermittent.
-4. The worker records progress, parts, and before/after proof.
-5. The resident confirms completion and can leave a rating.
-6. Chargeable work can use a sandbox payment flow after the core workflow is
-   reliable.
+```text
+Jetpack Compose UI
+        │
+ViewModel + StateFlow
+        │
+Resident Repository ───── Room (durable local drafts)
+        │
+      JSON API
+        │
+FastAPI → Service layer → SQLAlchemy → SQLite / PostgreSQL
+```
 
-The first release is an internal property-maintenance workflow, not a public
-services marketplace.
+I am building the project one complete flow at a time. For example, the resident request flow was connected from the Compose screen all the way to the database before starting the manager flow. This makes it easier to test each part in the actual app instead of building the entire backend or UI separately.
 
-## Planned technology
+## Tech stack
 
-- Android: Kotlin, Jetpack Compose, Material 3, Room, WorkManager
-- Backend: FastAPI and PostgreSQL
-- Notifications: Firebase Cloud Messaging
-- Payments: Razorpay Test Mode
-- Automation: GitHub Actions
+| Area | Technologies |
+| --- | --- |
+| Android | Kotlin, Jetpack Compose, Material 3, Navigation Compose, Coroutines, StateFlow |
+| Local data | Room, schema migrations, Android Photo Picker, Coil |
+| Backend | Python, FastAPI, Pydantic, Uvicorn |
+| Persistence | SQLAlchemy, Alembic, SQLite for local development, PostgreSQL-ready configuration |
+| Testing | JUnit, Compose UI tests, Room migration tests, FastAPI TestClient, Ruff, Android Lint |
 
-Technology choices remain provisional until the relevant feature is designed.
-See [the roadmap](docs/ROADMAP.md) and [product brief](docs/PRODUCT.md) for the
-current boundaries and open decisions.
+## Run locally
 
-## Repository guide
+### Backend
 
-- `docs/PRODUCT.md` - problem, users, MVP, research, and success measures
-- `docs/ROADMAP.md` - current stage, later stages, and exit criteria
-- `docs/DESIGN_SYSTEM.md` - initial visual direction and UI principles
-- `docs/LEARNING_LOG.md` - personalized explanation record
-- `docs/sessions/` - outcome and decisions from every build session
-- `android/` - Kotlin and Jetpack Compose application
-- `backend/` - FastAPI application, domain rules, repositories, and API tests
-
-## Run the backend locally
-
-From the repository root on macOS:
+Python 3 and a virtual environment are required.
 
 ```shell
 cd backend
@@ -68,18 +76,16 @@ python3 -m venv .venv
 .venv/bin/uvicorn app.main:app --reload
 ```
 
-The API runs at `http://127.0.0.1:8000`. FastAPI's interactive API page is at
-`http://127.0.0.1:8000/docs`.
+The API runs at `http://127.0.0.1:8000`; interactive API documentation is available at `http://127.0.0.1:8000/docs`.
 
-The zero-setup development database is `backend/localfix.db`, which is ignored
-by Git. Set `DATABASE_URL` to a `postgresql+psycopg://...` connection string to
-use PostgreSQL with the same SQLAlchemy repository and Alembic migration.
+### Android
 
-Run all backend tests and code checks with:
+1. Open the `android` directory in Android Studio.
+2. Start an Android emulator running API 26 or newer.
+3. Run the `app` configuration.
 
-```shell
-cd backend
-.venv/bin/python -m unittest discover -s tests -v
-.venv/bin/ruff check app tests
-.venv/bin/ruff format --check app tests
-```
+The debug build is already configured to reach the backend from the Android emulator at `http://10.0.2.2:8000`.
+
+## Current scope
+
+LocalFix is being built for the maintenance team already working in an apartment; it is not a marketplace for finding outside service providers. The current app uses fixed resident and apartment data while the main workflow is being built. Selected photos are saved with the local draft but are not uploaded to the backend yet. SQLite keeps local development simple, with PostgreSQL planned for deployment.
