@@ -25,28 +25,36 @@ class ApiResidentRepository(
 ) : ResidentRepository {
     private val mutableResidentData = MutableStateFlow(emptyResidentData())
     private val mutableRequestSyncState =
-        MutableStateFlow<RequestSyncState>(RequestSyncState.Loading)
+        MutableStateFlow<RequestSyncState>(RequestSyncState.InitialLoading)
+    private var hasLoadedRequests = false
 
     override val residentData: StateFlow<ResidentData> = mutableResidentData.asStateFlow()
     override val requestSyncState: StateFlow<RequestSyncState> =
         mutableRequestSyncState.asStateFlow()
 
     override suspend fun refreshRequests() {
-        mutableRequestSyncState.value = RequestSyncState.Loading
+        mutableRequestSyncState.value = if (hasLoadedRequests) {
+            RequestSyncState.Refreshing
+        } else {
+            RequestSyncState.InitialLoading
+        }
         runCatching { ticketApi.listTickets() }
             .onSuccess { tickets ->
                 mutableResidentData.update { data ->
                     data.copy(requests = tickets.map { it.toMaintenanceRequest(clock) })
                 }
+                hasLoadedRequests = true
                 mutableRequestSyncState.value = RequestSyncState.Ready
             }
             .onFailure {
-                mutableRequestSyncState.value = RequestSyncState.Error(CONNECTION_ERROR)
+                mutableRequestSyncState.value = RequestSyncState.Error(
+                    message = CONNECTION_ERROR,
+                    hasPreviousResult = hasLoadedRequests,
+                )
             }
     }
 
     override suspend fun createRequest(request: NewMaintenanceRequest): String {
-        mutableRequestSyncState.value = RequestSyncState.Loading
         return runCatching {
             ticketApi.createTicket(request.toPayload())
         }.onSuccess { createdTicket ->
@@ -58,15 +66,12 @@ class ApiResidentRepository(
                     },
                 )
             }
-            mutableRequestSyncState.value = RequestSyncState.Ready
-        }.onFailure {
-            mutableRequestSyncState.value = RequestSyncState.Error(CONNECTION_ERROR)
         }.getOrThrow().id
     }
 
     private companion object {
         const val CONNECTION_ERROR =
-            "Can't reach the LocalFix server. Start the backend and try again."
+            "We couldn't reach LocalFix. Check your connection and try again."
 
         fun emptyResidentData() = ResidentData(
             account = ResidentAccount(

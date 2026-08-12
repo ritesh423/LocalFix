@@ -29,6 +29,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.localfix.app.ui.components.LocalFixScreenHeader
+import com.localfix.app.ui.components.RequestLoadUiState
+import com.localfix.app.ui.components.RequestStatePanel
 import com.localfix.app.ui.components.RequestStatusBadge
 import com.localfix.app.ui.components.RequestSyncNotice
 import com.localfix.app.ui.theme.LocalFixRadius
@@ -44,6 +46,16 @@ fun ResidentRequestsScreen(
     onRetryRequests: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val requestLoadState = uiState.requestLoadState
+    val emptyCopy = when (uiState.selectedFilter) {
+        RequestFilter.ALL -> "No requests yet" to
+            "Report an issue and you can follow its progress here."
+        RequestFilter.ACTIVE -> "No active requests" to
+            "You don't have any repairs in progress."
+        RequestFilter.COMPLETED -> "No completed requests" to
+            "Finished repairs will appear here."
+    }
+
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
@@ -95,11 +107,12 @@ fun ResidentRequestsScreen(
                 }
             }
         }
-        if (uiState.isLoading || uiState.errorMessage != null) {
+        if (requestLoadState is RequestLoadUiState.Refreshing ||
+            requestLoadState is RequestLoadUiState.Stale
+        ) {
             item {
                 RequestSyncNotice(
-                    isLoading = uiState.isLoading,
-                    errorMessage = uiState.errorMessage,
+                    state = requestLoadState,
                     onRetry = onRetryRequests,
                     modifier = Modifier.padding(
                         horizontal = LocalFixSpacing.medium,
@@ -108,18 +121,40 @@ fun ResidentRequestsScreen(
                 )
             }
         }
-        items(
-            items = uiState.requests,
-            key = ResidentRequestItem::id,
-        ) { request ->
-            RequestCard(
-                request = request,
-                onClick = { onRequestClick(request.id) },
-                modifier = Modifier.padding(
-                    horizontal = LocalFixSpacing.medium,
-                    vertical = LocalFixSpacing.extraSmall,
-                ),
-            )
+        if (requestLoadState is RequestLoadUiState.Loading ||
+            requestLoadState is RequestLoadUiState.Failed ||
+            uiState.requests.isEmpty()
+        ) {
+            item {
+                RequestStatePanel(
+                    state = when {
+                        requestLoadState is RequestLoadUiState.Loading -> requestLoadState
+                        requestLoadState is RequestLoadUiState.Failed -> requestLoadState
+                        else -> RequestLoadUiState.Empty
+                    },
+                    emptyTitle = emptyCopy.first,
+                    emptyMessage = emptyCopy.second,
+                    onRetry = onRetryRequests,
+                    modifier = Modifier.padding(
+                        horizontal = LocalFixSpacing.medium,
+                        vertical = LocalFixSpacing.small,
+                    ),
+                )
+            }
+        } else {
+            items(
+                items = uiState.requests,
+                key = ResidentRequestItem::id,
+            ) { request ->
+                RequestCard(
+                    request = request,
+                    onClick = { onRequestClick(request.id) },
+                    modifier = Modifier.padding(
+                        horizontal = LocalFixSpacing.medium,
+                        vertical = LocalFixSpacing.extraSmall,
+                    ),
+                )
+            }
         }
         item {
             Spacer(modifier = Modifier.height(LocalFixSpacing.large))

@@ -20,6 +20,7 @@ import com.localfix.app.ui.home.MaintenanceRequestSummary
 import com.localfix.app.ui.create.CreateRequestUiState
 import com.localfix.app.ui.create.RequestDraft
 import com.localfix.app.ui.create.RequestDraftErrors
+import com.localfix.app.ui.components.RequestLoadUiState
 import com.localfix.app.ui.home.ResidentHomeUiState
 import com.localfix.app.ui.home.ServiceCategoryType
 import com.localfix.app.ui.home.ServiceCategory as ServiceCategoryItem
@@ -292,6 +293,9 @@ private fun createResidentUiState(
     val activeRequest = data.requests.firstOrNull { request ->
         request.status !in terminalStatuses && request.status != TicketStatus.AWAITING_CONFIRMATION
     }
+    val requestLoadState = requestSyncState.toLoadUiState(
+        hasVisibleRequests = visibleRequests.isNotEmpty(),
+    )
 
     return ResidentUiState(
         home = ResidentHomeUiState(
@@ -321,8 +325,9 @@ private fun createResidentUiState(
                     label = category.label,
                 )
             },
-            isLoadingRequests = requestSyncState is RequestSyncState.Loading,
-            requestErrorMessage = (requestSyncState as? RequestSyncState.Error)?.message,
+            requestLoadState = requestSyncState.toLoadUiState(
+                hasVisibleRequests = data.requests.isNotEmpty(),
+            ),
         ),
         requests = ResidentRequestsUiState(
             unitLabel = data.account.unitLabel,
@@ -338,8 +343,7 @@ private fun createResidentUiState(
                     updatedLabel = request.updatedLabel,
                 )
             },
-            isLoading = requestSyncState is RequestSyncState.Loading,
-            errorMessage = (requestSyncState as? RequestSyncState.Error)?.message,
+            requestLoadState = requestLoadState,
         ),
         profile = ResidentProfileUiState(
             name = data.account.name,
@@ -353,6 +357,23 @@ private fun createResidentUiState(
             request.id to request.toDetailUiState()
         },
     )
+}
+
+private fun RequestSyncState.toLoadUiState(
+    hasVisibleRequests: Boolean,
+): RequestLoadUiState = when (this) {
+    RequestSyncState.InitialLoading -> RequestLoadUiState.Loading
+    RequestSyncState.Refreshing -> RequestLoadUiState.Refreshing
+    RequestSyncState.Ready -> if (hasVisibleRequests) {
+        RequestLoadUiState.Content
+    } else {
+        RequestLoadUiState.Empty
+    }
+    is RequestSyncState.Error -> if (hasPreviousResult) {
+        RequestLoadUiState.Stale(message)
+    } else {
+        RequestLoadUiState.Failed(message)
+    }
 }
 
 private fun MaintenanceRequest.toDetailUiState(): ResidentRequestDetailUiState =

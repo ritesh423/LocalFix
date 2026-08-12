@@ -74,8 +74,25 @@ class ApiResidentRepositoryTest {
 
         repository.refreshRequests()
 
-        assertTrue(repository.requestSyncState.value is RequestSyncState.Error)
+        val state = repository.requestSyncState.value as RequestSyncState.Error
+        assertEquals(false, state.hasPreviousResult)
         assertEquals(emptyList<Any>(), repository.residentData.value.requests)
+    }
+
+    @Test
+    fun failedRefreshKeepsTheLastSuccessfulResult() = runTest {
+        val ticketApi = FakeTicketApi(
+            tickets = mutableListOf(ticketResponse()),
+        )
+        val repository = ApiResidentRepository(ticketApi, clock)
+        repository.refreshRequests()
+        ticketApi.listFailure = IOException("offline")
+
+        repository.refreshRequests()
+
+        val state = repository.requestSyncState.value as RequestSyncState.Error
+        assertTrue(state.hasPreviousResult)
+        assertEquals("Leaking kitchen tap", repository.residentData.value.requests.single().title)
     }
 
     private fun ticketResponse(
@@ -98,7 +115,7 @@ class ApiResidentRepositoryTest {
 
     private inner class FakeTicketApi(
         private val tickets: MutableList<TicketResponse> = mutableListOf(),
-        private val listFailure: Throwable? = null,
+        var listFailure: Throwable? = null,
     ) : TicketApi {
         var lastCreatePayload: TicketCreatePayload? = null
 

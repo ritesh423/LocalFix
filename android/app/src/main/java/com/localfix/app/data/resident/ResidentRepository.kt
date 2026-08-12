@@ -14,7 +14,11 @@ interface ResidentRepository {
 }
 
 sealed interface RequestSyncState {
-    data object Loading : RequestSyncState
+    data object InitialLoading : RequestSyncState
+    data object Refreshing : RequestSyncState
     data object Ready : RequestSyncState
-    data class Error(val message: String) : RequestSyncState
+    data class Error(
+        val message: String,
+        val hasPreviousResult: Boolean,
+    ) : RequestSyncState
 }

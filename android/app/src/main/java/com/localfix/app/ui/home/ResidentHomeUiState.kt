@@ -1,5 +1,7 @@
 package com.localfix.app.ui.home
 
+import com.localfix.app.ui.components.RequestLoadUiState
+
 data class ResidentHomeUiState(
     val residentName: String,
     val propertyName: String,
@@ -8,8 +10,7 @@ data class ResidentHomeUiState(
     val awaitingConfirmationCount: Int,
     val activeRequest: MaintenanceRequestSummary?,
     val categories: List<ServiceCategory>,
-    val isLoadingRequests: Boolean = false,
-    val requestErrorMessage: String? = null,
+    val requestLoadState: RequestLoadUiState = RequestLoadUiState.Content,
 ) {
     companion object {
         val sample = ResidentHomeUiState(

@@ -1,11 +1,12 @@
 package com.localfix.app.ui.requests
 
+import com.localfix.app.ui.components.RequestLoadUiState
+
 data class ResidentRequestsUiState(
     val unitLabel: String,
     val selectedFilter: RequestFilter,
     val requests: List<ResidentRequestItem>,
-    val isLoading: Boolean = false,
-    val errorMessage: String? = null,
+    val requestLoadState: RequestLoadUiState = RequestLoadUiState.Content,
 ) {
     companion object {
         val sample = ResidentRequestsUiState(

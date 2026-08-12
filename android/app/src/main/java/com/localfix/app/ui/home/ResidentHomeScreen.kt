@@ -46,6 +46,8 @@ import androidx.compose.ui.unit.dp
 import com.localfix.app.ui.theme.LocalFixRadius
 import com.localfix.app.ui.theme.LocalFixSpacing
 import com.localfix.app.ui.theme.LocalFixTheme
+import com.localfix.app.ui.components.RequestLoadUiState
+import com.localfix.app.ui.components.RequestStatePanel
 import com.localfix.app.ui.components.RequestSyncNotice
 
 @Composable
@@ -57,6 +59,10 @@ fun ResidentHomeScreen(
     onRetryRequests: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val requestLoadState = uiState.requestLoadState
+    val requestsUnavailable = requestLoadState is RequestLoadUiState.Loading ||
+        requestLoadState is RequestLoadUiState.Failed
+
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
@@ -70,43 +76,72 @@ fun ResidentHomeScreen(
             )
         }
 
-        item {
-            StatusOverview(
-                activeCount = uiState.activeRequestCount,
-                awaitingCount = uiState.awaitingConfirmationCount,
-                modifier = Modifier.padding(
-                    horizontal = LocalFixSpacing.medium,
-                    vertical = LocalFixSpacing.large,
-                ),
-            )
-        }
-
-        if (uiState.isLoadingRequests || uiState.requestErrorMessage != null) {
+        if (requestsUnavailable) {
             item {
-                RequestSyncNotice(
-                    isLoading = uiState.isLoadingRequests,
-                    errorMessage = uiState.requestErrorMessage,
+                RequestStatePanel(
+                    state = requestLoadState,
+                    emptyTitle = "No requests yet",
+                    emptyMessage = "Report an issue when something in your home needs attention.",
                     onRetry = onRetryRequests,
                     modifier = Modifier.padding(
-                        start = LocalFixSpacing.medium,
-                        end = LocalFixSpacing.medium,
-                        bottom = LocalFixSpacing.large,
+                        horizontal = LocalFixSpacing.medium,
+                        vertical = LocalFixSpacing.large,
                     ),
                 )
             }
-        }
+        } else {
+            item {
+                StatusOverview(
+                    activeCount = uiState.activeRequestCount,
+                    awaitingCount = uiState.awaitingConfirmationCount,
+                    modifier = Modifier.padding(
+                        horizontal = LocalFixSpacing.medium,
+                        vertical = LocalFixSpacing.large,
+                    ),
+                )
+            }
 
-        uiState.activeRequest?.let { request ->
+            if (requestLoadState is RequestLoadUiState.Refreshing ||
+                requestLoadState is RequestLoadUiState.Stale
+            ) {
+                item {
+                    RequestSyncNotice(
+                        state = requestLoadState,
+                        onRetry = onRetryRequests,
+                        modifier = Modifier.padding(
+                            start = LocalFixSpacing.medium,
+                            end = LocalFixSpacing.medium,
+                            bottom = LocalFixSpacing.large,
+                        ),
+                    )
+                }
+            }
+
             item {
                 SectionHeader(
                     title = "Active request",
-                    action = "View all",
+                    action = if (uiState.activeRequest != null) "View all" else null,
                 )
             }
-            item {
-                ActiveRequestCard(
-                    request = request,
-                    onClick = { onRequestClick(request.id) },
+            uiState.activeRequest?.let { request ->
+                item {
+                    ActiveRequestCard(
+                        request = request,
+                        onClick = { onRequestClick(request.id) },
+                        modifier = Modifier.padding(
+                            start = LocalFixSpacing.medium,
+                            end = LocalFixSpacing.medium,
+                            top = LocalFixSpacing.small,
+                            bottom = LocalFixSpacing.large,
+                        ),
+                    )
+                }
+            } ?: item {
+                RequestStatePanel(
+                    state = RequestLoadUiState.Empty,
+                    emptyTitle = "No active requests",
+                    emptyMessage = "New and ongoing repairs will appear here.",
+                    onRetry = onRetryRequests,
                     modifier = Modifier.padding(
                         start = LocalFixSpacing.medium,
                         end = LocalFixSpacing.medium,

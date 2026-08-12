@@ -2,14 +2,21 @@ package com.localfix.app.ui.resident
 
 import com.localfix.app.data.draft.InMemoryRequestDraftRepository
 import com.localfix.app.data.model.AccessWindow
+import com.localfix.app.data.model.NewMaintenanceRequest
+import com.localfix.app.data.model.ResidentData
 import com.localfix.app.data.model.SavedRequestDraft
 import com.localfix.app.data.model.UrgencySuggestion
+import com.localfix.app.data.resident.ResidentRepository
+import com.localfix.app.data.resident.RequestSyncState
 import com.localfix.app.data.resident.SampleResidentRepository
 import com.localfix.app.data.model.ServiceCategory
 import com.localfix.app.data.model.TicketStatus
 import com.localfix.app.testing.MainDispatcherRule
+import com.localfix.app.ui.components.RequestLoadUiState
 import com.localfix.app.ui.requests.RequestFilter
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -181,8 +188,80 @@ class ResidentViewModelTest {
         assertEquals(null, draftRepository.observeDraft().first()?.photoUri)
     }
 
+    @Test
+    fun initialRequestLoadHasADedicatedLoadingState() = runTest {
+        val repository = FixedStateResidentRepository(
+            data = SampleResidentRepository().residentData.value.copy(requests = emptyList()),
+            syncState = RequestSyncState.InitialLoading,
+        )
+        val viewModel = ResidentViewModel(repository, InMemoryRequestDraftRepository())
+        advanceUntilIdle()
+
+        assertEquals(RequestLoadUiState.Loading, viewModel.uiState.value.home.requestLoadState)
+        assertEquals(RequestLoadUiState.Loading, viewModel.uiState.value.requests.requestLoadState)
+    }
+
+    @Test
+    fun successfulEmptyResponseIsDifferentFromLoading() = runTest {
+        val repository = FixedStateResidentRepository(
+            data = SampleResidentRepository().residentData.value.copy(requests = emptyList()),
+            syncState = RequestSyncState.Ready,
+        )
+        val viewModel = ResidentViewModel(repository, InMemoryRequestDraftRepository())
+        advanceUntilIdle()
+
+        assertEquals(RequestLoadUiState.Empty, viewModel.uiState.value.home.requestLoadState)
+        assertEquals(RequestLoadUiState.Empty, viewModel.uiState.value.requests.requestLoadState)
+    }
+
+    @Test
+    fun firstLoadFailureIsDifferentFromStaleData() = runTest {
+        val accountData = SampleResidentRepository().residentData.value
+        val failedRepository = FixedStateResidentRepository(
+            data = accountData.copy(requests = emptyList()),
+            syncState = RequestSyncState.Error("Server unavailable", hasPreviousResult = false),
+        )
+        val staleRepository = FixedStateResidentRepository(
+            data = accountData,
+            syncState = RequestSyncState.Error("Server unavailable", hasPreviousResult = true),
+        )
+
+        val failedViewModel = ResidentViewModel(
+            failedRepository,
+            InMemoryRequestDraftRepository(),
+        )
+        val staleViewModel = ResidentViewModel(
+            staleRepository,
+            InMemoryRequestDraftRepository(),
+        )
+        advanceUntilIdle()
+
+        assertEquals(
+            RequestLoadUiState.Failed("Server unavailable"),
+            failedViewModel.uiState.value.requests.requestLoadState,
+        )
+        assertEquals(
+            RequestLoadUiState.Stale("Server unavailable"),
+            staleViewModel.uiState.value.requests.requestLoadState,
+        )
+        assertEquals(3, staleViewModel.uiState.value.requests.requests.size)
+    }
+
     private fun createViewModel(): ResidentViewModel = ResidentViewModel(
         SampleResidentRepository(),
         InMemoryRequestDraftRepository(),
     )
+
+    private class FixedStateResidentRepository(
+        data: ResidentData,
+        syncState: RequestSyncState,
+    ) : ResidentRepository {
+        override val residentData: StateFlow<ResidentData> = MutableStateFlow(data)
+        override val requestSyncState: StateFlow<RequestSyncState> = MutableStateFlow(syncState)
+
+        override suspend fun createRequest(request: NewMaintenanceRequest): String =
+            error("Not needed in this test")
+
+        override suspend fun refreshRequests() = Unit
+    }
 }
