@@ -11,6 +11,8 @@ import androidx.compose.ui.test.performTextInput
 import com.localfix.app.data.AppContainer
 import com.localfix.app.data.draft.InMemoryRequestDraftRepository
 import com.localfix.app.data.draft.RequestDraftRepository
+import com.localfix.app.data.manager.ManagerRepository
+import com.localfix.app.data.manager.SampleManagerRepository
 import com.localfix.app.data.resident.ResidentRepository
 import com.localfix.app.data.resident.SampleResidentRepository
 import org.junit.Rule
@@ -66,8 +68,27 @@ class LocalFixNavigationTest {
         composeRule.onNodeWithText("Choose your workspace").assertIsDisplayed()
     }
 
+    @Test
+    fun managerCanAssignAnOpenRequestAndReturnToQueue() {
+        composeRule.setContent {
+            LocalFixApp(testAppContainer())
+        }
+
+        composeRule.onNodeWithText("Property manager").performClick()
+        composeRule.onNodeWithText("Property queue").assertIsDisplayed()
+        composeRule.onNodeWithText("Bathroom pipe is leaking").performClick()
+        composeRule.onNodeWithText("Set final priority").assertIsDisplayed()
+        composeRule.onNodeWithTag("manager-priority-soon").performClick()
+        composeRule.onNodeWithText("Arun Kumar").performClick()
+        composeRule.onNodeWithTag("manager-assign-ticket").performClick()
+
+        composeRule.onNodeWithText("Property queue").assertIsDisplayed()
+        composeRule.onNodeWithText("Assigned to Arun Kumar").assertIsDisplayed()
+    }
+
     private fun testAppContainer(): AppContainer = object : AppContainer {
         override val residentRepository: ResidentRepository = SampleResidentRepository()
+        override val managerRepository: ManagerRepository = SampleManagerRepository()
         override val requestDraftRepository: RequestDraftRepository =
             InMemoryRequestDraftRepository()
     }

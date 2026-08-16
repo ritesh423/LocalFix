@@ -15,6 +15,17 @@ interface TicketApi {
     suspend fun listTickets(): List<TicketResponse>
 }
 
+interface ManagerTicketApi {
+    suspend fun listManagerTickets(): List<TicketResponse>
+
+    suspend fun listManagerWorkers(): List<WorkerResponse>
+
+    suspend fun assignTicket(
+        ticketId: String,
+        request: TicketAssignmentPayload,
+    ): TicketResponse
+}
+
 @Serializable
 data class TicketCreatePayload(
     @SerialName("client_request_id") val clientRequestId: String,
@@ -26,17 +37,35 @@ data class TicketCreatePayload(
 )
 
 @Serializable
+data class TicketAssignmentPayload(
+    @SerialName("expected_version") val expectedVersion: Int,
+    val priority: String,
+    @SerialName("worker_id") val workerId: String,
+)
+
+@Serializable
+data class WorkerResponse(
+    val id: String,
+    val name: String,
+    val specialty: String,
+)
+
+@Serializable
 data class TicketResponse(
     val id: String,
     @SerialName("client_request_id") val clientRequestId: String,
+    @SerialName("property_id") val propertyId: String? = null,
     @SerialName("unit_id") val unitId: String,
+    @SerialName("resident_id") val residentId: String? = null,
     val title: String,
     val description: String,
     val category: String,
     @SerialName("urgency_suggestion") val urgencySuggestion: String,
+    val priority: String? = null,
     @SerialName("access_window") val accessWindow: String,
     val status: String,
     val version: Int,
+    @SerialName("assigned_worker_id") val assignedWorkerId: String? = null,
     @SerialName("assigned_worker") val assignedWorker: String?,
     @SerialName("created_at") val createdAt: String,
     @SerialName("updated_at") val updatedAt: String,
@@ -45,7 +74,7 @@ data class TicketResponse(
 class HttpTicketApi(
     baseUrl: String,
     private val json: Json = Json { ignoreUnknownKeys = true },
-) : TicketApi {
+) : TicketApi, ManagerTicketApi {
     private val baseUrl = baseUrl.trimEnd('/')
 
     override suspend fun createTicket(request: TicketCreatePayload): TicketResponse {
@@ -59,6 +88,28 @@ class HttpTicketApi(
 
     override suspend fun listTickets(): List<TicketResponse> {
         val responseBody = execute(method = "GET", path = "/tickets")
+        return json.decodeFromString(responseBody)
+    }
+
+    override suspend fun listManagerTickets(): List<TicketResponse> {
+        val responseBody = execute(method = "GET", path = "/manager/tickets")
+        return json.decodeFromString(responseBody)
+    }
+
+    override suspend fun listManagerWorkers(): List<WorkerResponse> {
+        val responseBody = execute(method = "GET", path = "/manager/workers")
+        return json.decodeFromString(responseBody)
+    }
+
+    override suspend fun assignTicket(
+        ticketId: String,
+        request: TicketAssignmentPayload,
+    ): TicketResponse {
+        val responseBody = execute(
+            method = "POST",
+            path = "/manager/tickets/$ticketId/assignment",
+            requestBody = json.encodeToString(request),
+        )
         return json.decodeFromString(responseBody)
     }
 

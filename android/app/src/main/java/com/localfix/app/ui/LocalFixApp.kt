@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import com.localfix.app.data.AppContainer
+import com.localfix.app.ui.navigation.ManagerNavigation
 import com.localfix.app.ui.navigation.ResidentNavigation
 import com.localfix.app.ui.role.RoleSelectionScreen
 import com.localfix.app.ui.role.RoleWorkspaceScreen
@@ -27,9 +28,11 @@ fun LocalFixApp(appContainer: AppContainer) {
                 requestDraftRepository = appContainer.requestDraftRepository,
                 onSwitchRole = { activeRoleName = null },
             )
-            AppRole.MANAGER,
-            AppRole.WORKER,
-            -> RoleWorkspaceScreen(
+            AppRole.MANAGER -> ManagerNavigation(
+                repository = appContainer.managerRepository,
+                onSwitchRole = { activeRoleName = null },
+            )
+            AppRole.WORKER -> RoleWorkspaceScreen(
                 role = activeRole,
                 onSwitchRole = { activeRoleName = null },
             )

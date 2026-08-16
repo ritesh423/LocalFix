@@ -33,7 +33,7 @@ fun RoleWorkspaceScreen(
     onSwitchRole: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    require(role != AppRole.RESIDENT)
+    require(role == AppRole.WORKER)
     BackHandler(onBack = onSwitchRole)
 
     val content = role.workspaceContent
@@ -146,17 +146,6 @@ private data class WorkspaceContent(
 
 private val AppRole.workspaceContent: WorkspaceContent
     get() = when (this) {
-        AppRole.MANAGER -> WorkspaceContent(
-            title = "Property queue",
-            subtitle = "Prioritize requests and keep every handoff visible.",
-            primaryCount = "4",
-            primaryLabel = "Open requests",
-            secondaryCount = "1",
-            secondaryLabel = "Blocked job",
-            cardEyebrow = "Needs assignment",
-            cardTitle = "Water seepage near A-302",
-            cardBody = "Reported 24 minutes ago · Suggested urgency: high",
-        )
         AppRole.WORKER -> WorkspaceContent(
             title = "My jobs",
             subtitle = "Work from your assigned queue, even with poor internet.",
@@ -168,15 +157,15 @@ private val AppRole.workspaceContent: WorkspaceContent
             cardTitle = "Leaking kitchen tap · A-204",
             cardBody = "Access available until 12:30 PM · Plumbing",
         )
-        AppRole.RESIDENT -> error("Resident uses resident navigation")
+        AppRole.RESIDENT, AppRole.MANAGER -> error("This role has its own navigation")
     }
 
 @Preview(showBackground = true, widthDp = 393, heightDp = 852)
 @Composable
-private fun ManagerWorkspacePreview() {
+private fun WorkerWorkspacePreview() {
     LocalFixTheme(darkTheme = false) {
         RoleWorkspaceScreen(
-            role = AppRole.MANAGER,
+            role = AppRole.WORKER,
             onSwitchRole = {},
         )
     }
