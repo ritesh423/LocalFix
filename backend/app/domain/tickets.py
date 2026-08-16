@@ -19,6 +19,12 @@ class UrgencySuggestion(StrEnum):
     URGENT = "urgent"
 
 
+class TicketPriority(StrEnum):
+    ROUTINE = "routine"
+    SOON = "soon"
+    URGENT = "urgent"
+
+
 class AccessWindow(StrEnum):
     ANYTIME = "anytime"
     MORNING = "morning"
@@ -34,6 +40,21 @@ class ResidentContext:
 
 
 @dataclass(frozen=True)
+class ManagerContext:
+    user_id: UUID
+    property_id: UUID
+
+
+@dataclass(frozen=True)
+class Worker:
+    id: UUID
+    property_id: UUID
+    name: str
+    specialty: ServiceCategory
+    is_active: bool
+
+
+@dataclass(frozen=True)
 class Ticket:
     id: UUID
     client_request_id: UUID
@@ -44,9 +65,11 @@ class Ticket:
     description: str
     category: ServiceCategory
     urgency_suggestion: UrgencySuggestion
+    priority: TicketPriority | None
     access_window: AccessWindow
     status: TicketStatus
     version: int
+    assigned_worker_id: UUID | None
     assigned_worker: str | None
     created_at: datetime
     updated_at: datetime

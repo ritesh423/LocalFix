@@ -91,6 +91,150 @@ class TicketsApiTest(unittest.TestCase):
         self.assertEqual(hidden_response.json(), unknown_response.json())
         self.assertEqual(self.client.get("/tickets").json(), [])
 
+    def test_manager_queue_contains_every_resident_ticket_for_the_property(
+        self,
+    ) -> None:
+        own_ticket = self.client.post("/tickets", json=self.ticket_payload()).json()
+        other_resident = ResidentContext(
+            user_id=UUID("10000000-0000-0000-0000-000000000999"),
+            property_id=DEMO_RESIDENT_CONTEXT.property_id,
+            unit_id=UUID("30000000-0000-0000-0000-000000000999"),
+        )
+        other_ticket = (
+            TicketService(self.repository)
+            .create_ticket(
+                CreateTicketCommand(
+                    client_request_id=uuid4(),
+                    title="Lobby light is not working",
+                    description="The light near the second floor lift does not turn on.",
+                    category=ServiceCategory.ELECTRICAL,
+                    urgency_suggestion=UrgencySuggestion.SOON,
+                    access_window=AccessWindow.ANYTIME,
+                ),
+                other_resident,
+            )
+            .ticket
+        )
+
+        manager_queue = self.client.get("/manager/tickets").json()
+        resident_queue = self.client.get("/tickets").json()
+
+        self.assertEqual(
+            {ticket["id"] for ticket in manager_queue},
+            {own_ticket["id"], str(other_ticket.id)},
+        )
+        self.assertEqual(
+            [ticket["id"] for ticket in resident_queue], [own_ticket["id"]]
+        )
+
+    def test_manager_can_set_priority_and_assign_an_open_ticket(self) -> None:
+        created = self.client.post("/tickets", json=self.ticket_payload()).json()
+
+        response = self.client.post(
+            f"/manager/tickets/{created['id']}/assignment",
+            json=self.assignment_payload(expected_version=created["version"]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        assigned = response.json()
+        self.assertEqual(assigned["status"], "assigned")
+        self.assertEqual(assigned["priority"], "urgent")
+        self.assertEqual(assigned["version"], 2)
+        self.assertEqual(
+            assigned["assigned_worker_id"],
+            "40000000-0000-0000-0000-000000000001",
+        )
+        self.assertEqual(assigned["assigned_worker"], "Arun Kumar")
+        self.assertEqual(
+            self.client.get(f"/tickets/{created['id']}").json(),
+            assigned,
+        )
+
+    def test_manager_can_list_active_workers_for_the_property(self) -> None:
+        response = self.client.get("/manager/workers")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [worker["name"] for worker in response.json()],
+            ["Arun Kumar", "Maya Singh", "Sameer Khan"],
+        )
+
+    def test_stale_manager_version_is_rejected_without_overwriting_assignment(
+        self,
+    ) -> None:
+        created = self.client.post("/tickets", json=self.ticket_payload()).json()
+        assignment_url = f"/manager/tickets/{created['id']}/assignment"
+        first = self.client.post(assignment_url, json=self.assignment_payload(1))
+
+        stale = self.client.post(
+            assignment_url,
+            json={
+                **self.assignment_payload(1),
+                "worker_id": "40000000-0000-0000-0000-000000000002",
+            },
+        )
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(stale.status_code, 409)
+        self.assertEqual(stale.json()["detail"]["code"], "ticket_version_conflict")
+        stored = self.client.get(f"/tickets/{created['id']}").json()
+        self.assertEqual(stored["assigned_worker"], "Arun Kumar")
+        self.assertEqual(stored["version"], 2)
+
+    def test_unknown_worker_cannot_be_assigned(self) -> None:
+        created = self.client.post("/tickets", json=self.ticket_payload()).json()
+
+        response = self.client.post(
+            f"/manager/tickets/{created['id']}/assignment",
+            json={
+                **self.assignment_payload(1),
+                "worker_id": "40000000-0000-0000-0000-000000000999",
+            },
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["detail"]["code"], "worker_not_eligible")
+
+    def test_assignment_is_rejected_when_ticket_is_no_longer_open(self) -> None:
+        created = self.client.post("/tickets", json=self.ticket_payload()).json()
+        assignment_url = f"/manager/tickets/{created['id']}/assignment"
+        self.client.post(assignment_url, json=self.assignment_payload(1))
+
+        response = self.client.post(assignment_url, json=self.assignment_payload(2))
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["detail"]["code"], "transition_not_allowed")
+
+    def test_manager_cannot_assign_a_ticket_from_another_property(self) -> None:
+        other_property_resident = ResidentContext(
+            user_id=UUID("10000000-0000-0000-0000-000000000998"),
+            property_id=UUID("20000000-0000-0000-0000-000000000998"),
+            unit_id=UUID("30000000-0000-0000-0000-000000000998"),
+        )
+        hidden = (
+            TicketService(self.repository)
+            .create_ticket(
+                CreateTicketCommand(
+                    client_request_id=uuid4(),
+                    title="Issue in another property",
+                    description="This ticket must not appear in the demo manager queue.",
+                    category=ServiceCategory.OTHER,
+                    urgency_suggestion=UrgencySuggestion.ROUTINE,
+                    access_window=AccessWindow.ANYTIME,
+                ),
+                other_property_resident,
+            )
+            .ticket
+        )
+
+        response = self.client.post(
+            f"/manager/tickets/{hidden.id}/assignment",
+            json=self.assignment_payload(1),
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["detail"]["code"], "ticket_not_found")
+
     @staticmethod
     def ticket_payload() -> dict[str, str]:
         return {
@@ -100,6 +244,14 @@ class TicketsApiTest(unittest.TestCase):
             "category": "plumbing",
             "urgency_suggestion": "soon",
             "access_window": "morning",
+        }
+
+    @staticmethod
+    def assignment_payload(expected_version: int) -> dict[str, str | int]:
+        return {
+            "expected_version": expected_version,
+            "priority": "urgent",
+            "worker_id": "40000000-0000-0000-0000-000000000001",
         }
 
 

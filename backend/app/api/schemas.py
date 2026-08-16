@@ -8,9 +8,11 @@ from app.domain.tickets import (
     AccessWindow,
     ServiceCategory,
     Ticket,
+    TicketPriority,
     UrgencySuggestion,
+    Worker,
 )
-from app.services.tickets import CreateTicketCommand
+from app.services.tickets import AssignTicketCommand, CreateTicketCommand
 
 
 class TicketCreateRequest(BaseModel):
@@ -34,17 +36,50 @@ class TicketCreateRequest(BaseModel):
         )
 
 
+class TicketAssignmentRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    expected_version: int = Field(ge=1)
+    priority: TicketPriority
+    worker_id: UUID
+
+    def to_command(self) -> AssignTicketCommand:
+        return AssignTicketCommand(
+            expected_version=self.expected_version,
+            priority=self.priority,
+            worker_id=self.worker_id,
+        )
+
+
+class WorkerResponse(BaseModel):
+    id: UUID
+    name: str
+    specialty: ServiceCategory
+
+    @classmethod
+    def from_domain(cls, worker: Worker) -> "WorkerResponse":
+        return cls(
+            id=worker.id,
+            name=worker.name,
+            specialty=worker.specialty,
+        )
+
+
 class TicketResponse(BaseModel):
     id: UUID
     client_request_id: UUID
+    property_id: UUID
     unit_id: UUID
+    resident_id: UUID
     title: str
     description: str
     category: ServiceCategory
     urgency_suggestion: UrgencySuggestion
+    priority: TicketPriority | None
     access_window: AccessWindow
     status: TicketStatus
     version: int
+    assigned_worker_id: UUID | None
     assigned_worker: str | None
     created_at: datetime
     updated_at: datetime
@@ -54,14 +89,18 @@ class TicketResponse(BaseModel):
         return cls(
             id=ticket.id,
             client_request_id=ticket.client_request_id,
+            property_id=ticket.property_id,
             unit_id=ticket.unit_id,
+            resident_id=ticket.resident_id,
             title=ticket.title,
             description=ticket.description,
             category=ticket.category,
             urgency_suggestion=ticket.urgency_suggestion,
+            priority=ticket.priority,
             access_window=ticket.access_window,
             status=ticket.status,
             version=ticket.version,
+            assigned_worker_id=ticket.assigned_worker_id,
             assigned_worker=ticket.assigned_worker,
             created_at=ticket.created_at,
             updated_at=ticket.updated_at,

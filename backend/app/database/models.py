@@ -17,6 +17,12 @@ class TicketRecord(Base):
             "property_id",
             "resident_id",
         ),
+        Index(
+            "ix_tickets_manager_queue",
+            "property_id",
+            "status",
+            "updated_at",
+        ),
         UniqueConstraint(
             "client_request_id",
             name="uq_tickets_client_request_id",
@@ -32,9 +38,11 @@ class TicketRecord(Base):
     description: Mapped[str] = mapped_column(String(500))
     category: Mapped[str] = mapped_column(String(32))
     urgency_suggestion: Mapped[str] = mapped_column(String(32))
+    priority: Mapped[str | None] = mapped_column(String(32), nullable=True)
     access_window: Mapped[str] = mapped_column(String(32))
     status: Mapped[str] = mapped_column(String(32))
     version: Mapped[int] = mapped_column(Integer)
+    assigned_worker_id: Mapped[UUID | None] = mapped_column(Uuid(), nullable=True)
     assigned_worker: Mapped[str | None] = mapped_column(String(120), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
