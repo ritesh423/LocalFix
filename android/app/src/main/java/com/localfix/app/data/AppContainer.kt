@@ -12,11 +12,14 @@ import com.localfix.app.data.manager.ManagerRepository
 import com.localfix.app.data.remote.HttpTicketApi
 import com.localfix.app.data.resident.ApiResidentRepository
 import com.localfix.app.data.resident.ResidentRepository
+import com.localfix.app.data.worker.ApiWorkerRepository
+import com.localfix.app.data.worker.WorkerRepository
 import com.localfix.app.R
 
 interface AppContainer {
     val residentRepository: ResidentRepository
     val managerRepository: ManagerRepository
+    val workerRepository: WorkerRepository
     val requestDraftRepository: RequestDraftRepository
 }
 
@@ -34,6 +37,7 @@ class DefaultAppContainer(context: Context) : AppContainer {
         ticketApi = ticketApi,
     )
     override val managerRepository: ManagerRepository = ApiManagerRepository(ticketApi)
+    override val workerRepository: WorkerRepository = ApiWorkerRepository(ticketApi)
     override val requestDraftRepository: RequestDraftRepository =
         RoomRequestDraftRepository(database.requestDraftDao())
 }

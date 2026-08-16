@@ -18,6 +18,7 @@ from app.domain.tickets import (
     TicketPriority,
     UrgencySuggestion,
     Worker,
+    WorkerContext,
 )
 from app.repositories.tickets import TicketRepository
 
@@ -43,6 +44,11 @@ class AssignTicketCommand:
     expected_version: int
     priority: TicketPriority
     worker_id: UUID
+
+
+@dataclass(frozen=True)
+class StartTicketCommand:
+    expected_version: int
 
 
 class TicketNotFoundError(LookupError):
@@ -123,6 +129,46 @@ class TicketService:
             ),
             key=lambda worker: worker.name,
         )
+
+    def list_worker_tickets(self, worker: WorkerContext) -> list[Ticket]:
+        return self._repository.list_for_worker(
+            property_id=worker.property_id,
+            worker_id=worker.worker_id,
+        )
+
+    def start_ticket(
+        self,
+        ticket_id: UUID,
+        command: StartTicketCommand,
+        worker: WorkerContext,
+    ) -> Ticket:
+        ticket = self._repository.get_for_worker(
+            ticket_id=ticket_id,
+            property_id=worker.property_id,
+            worker_id=worker.worker_id,
+        )
+        if ticket is None:
+            raise TicketNotFoundError
+        if ticket.version != command.expected_version:
+            raise TicketVersionConflictError
+
+        started_ticket = replace(
+            ticket,
+            status=transition(
+                current=ticket.status,
+                action=TicketAction.START,
+                actor=UserRole.WORKER,
+            ),
+            version=ticket.version + 1,
+            updated_at=datetime.now(UTC),
+        )
+        was_updated = self._repository.update_if_version(
+            started_ticket,
+            expected_version=command.expected_version,
+        )
+        if not was_updated:
+            raise TicketVersionConflictError
+        return started_ticket
 
     def assign_ticket(
         self,

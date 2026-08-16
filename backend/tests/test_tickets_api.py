@@ -235,6 +235,86 @@ class TicketsApiTest(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.json()["detail"]["code"], "ticket_not_found")
 
+    def test_worker_queue_contains_only_jobs_assigned_to_that_worker(self) -> None:
+        arun_ticket = self.client.post("/tickets", json=self.ticket_payload()).json()
+        maya_ticket = self.client.post("/tickets", json=self.ticket_payload()).json()
+        self.client.post(
+            f"/manager/tickets/{arun_ticket['id']}/assignment",
+            json=self.assignment_payload(1),
+        )
+        self.client.post(
+            f"/manager/tickets/{maya_ticket['id']}/assignment",
+            json={
+                **self.assignment_payload(1),
+                "worker_id": "40000000-0000-0000-0000-000000000002",
+            },
+        )
+
+        response = self.client.get("/worker/tickets")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [ticket["id"] for ticket in response.json()],
+            [arun_ticket["id"]],
+        )
+
+    def test_assigned_worker_can_start_their_job(self) -> None:
+        created = self.client.post("/tickets", json=self.ticket_payload()).json()
+        assigned = self.client.post(
+            f"/manager/tickets/{created['id']}/assignment",
+            json=self.assignment_payload(1),
+        ).json()
+
+        response = self.client.post(
+            f"/worker/tickets/{created['id']}/start",
+            json={"expected_version": assigned["version"]},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        started = response.json()
+        self.assertEqual(started["status"], "in_progress")
+        self.assertEqual(started["version"], 3)
+        self.assertEqual(
+            self.client.get(f"/tickets/{created['id']}").json(),
+            started,
+        )
+
+    def test_worker_cannot_start_another_workers_job(self) -> None:
+        created = self.client.post("/tickets", json=self.ticket_payload()).json()
+        self.client.post(
+            f"/manager/tickets/{created['id']}/assignment",
+            json={
+                **self.assignment_payload(1),
+                "worker_id": "40000000-0000-0000-0000-000000000002",
+            },
+        )
+
+        response = self.client.post(
+            f"/worker/tickets/{created['id']}/start",
+            json={"expected_version": 2},
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["detail"]["code"], "ticket_not_found")
+
+    def test_worker_start_rejects_stale_versions_and_repeated_start(self) -> None:
+        created = self.client.post("/tickets", json=self.ticket_payload()).json()
+        self.client.post(
+            f"/manager/tickets/{created['id']}/assignment",
+            json=self.assignment_payload(1),
+        )
+        start_url = f"/worker/tickets/{created['id']}/start"
+
+        stale = self.client.post(start_url, json={"expected_version": 1})
+        started = self.client.post(start_url, json={"expected_version": 2})
+        repeated = self.client.post(start_url, json={"expected_version": 3})
+
+        self.assertEqual(stale.status_code, 409)
+        self.assertEqual(stale.json()["detail"]["code"], "ticket_version_conflict")
+        self.assertEqual(started.status_code, 200)
+        self.assertEqual(repeated.status_code, 409)
+        self.assertEqual(repeated.json()["detail"]["code"], "transition_not_allowed")
+
     @staticmethod
     def ticket_payload() -> dict[str, str]:
         return {

@@ -3,7 +3,13 @@ from uuid import UUID
 
 from fastapi import Depends, Request
 
-from app.domain.tickets import ManagerContext, ResidentContext, ServiceCategory, Worker
+from app.domain.tickets import (
+    ManagerContext,
+    ResidentContext,
+    ServiceCategory,
+    Worker,
+    WorkerContext,
+)
 from app.repositories.tickets import TicketRepository
 from app.services.tickets import TicketService
 
@@ -42,6 +48,11 @@ DEMO_WORKERS = (
     ),
 )
 
+DEMO_WORKER_CONTEXT = WorkerContext(
+    worker_id=DEMO_WORKERS[0].id,
+    property_id=DEMO_WORKERS[0].property_id,
+)
+
 
 def get_ticket_repository(request: Request) -> TicketRepository:
     return request.app.state.ticket_repository
@@ -61,6 +72,10 @@ def get_manager_context() -> ManagerContext:
     return DEMO_MANAGER_CONTEXT
 
 
+def get_worker_context() -> WorkerContext:
+    return DEMO_WORKER_CONTEXT
+
+
 TicketServiceDependency = Annotated[TicketService, Depends(get_ticket_service)]
 ResidentContextDependency = Annotated[
     ResidentContext,
@@ -69,4 +84,8 @@ ResidentContextDependency = Annotated[
 ManagerContextDependency = Annotated[
     ManagerContext,
     Depends(get_manager_context),
+]
+WorkerContextDependency = Annotated[
+    WorkerContext,
+    Depends(get_worker_context),
 ]

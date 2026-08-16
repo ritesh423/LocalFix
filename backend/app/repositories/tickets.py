@@ -30,6 +30,19 @@ class TicketRepository(Protocol):
         property_id: UUID,
     ) -> Ticket | None: ...
 
+    def list_for_worker(
+        self,
+        property_id: UUID,
+        worker_id: UUID,
+    ) -> list[Ticket]: ...
+
+    def get_for_worker(
+        self,
+        ticket_id: UUID,
+        property_id: UUID,
+        worker_id: UUID,
+    ) -> Ticket | None: ...
+
     def update_if_version(
         self,
         ticket: Ticket,
@@ -105,6 +118,36 @@ class InMemoryTicketRepository:
     ) -> Ticket | None:
         ticket = self._tickets.get(ticket_id)
         if ticket is None or ticket.property_id != property_id:
+            return None
+        return ticket
+
+    def list_for_worker(
+        self,
+        property_id: UUID,
+        worker_id: UUID,
+    ) -> list[Ticket]:
+        visible_tickets = (
+            ticket
+            for ticket in self._tickets.values()
+            if ticket.property_id == property_id
+            and ticket.assigned_worker_id == worker_id
+        )
+        return sorted(
+            visible_tickets,
+            key=lambda ticket: ticket.updated_at,
+            reverse=True,
+        )
+
+    def get_for_worker(
+        self,
+        ticket_id: UUID,
+        property_id: UUID,
+        worker_id: UUID,
+    ) -> Ticket | None:
+        ticket = self._tickets.get(ticket_id)
+        if ticket is None:
+            return None
+        if ticket.property_id != property_id or ticket.assigned_worker_id != worker_id:
             return None
         return ticket
 

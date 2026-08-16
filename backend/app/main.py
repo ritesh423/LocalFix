@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.routes.manager_tickets import router as manager_tickets_router
 from app.api.routes.tickets import router as tickets_router
+from app.api.routes.worker_tickets import router as worker_tickets_router
 from app.database.config import get_database_url
 from app.database.session import create_database_engine, create_session_factory
 from app.repositories.sqlalchemy_tickets import SqlAlchemyTicketRepository
@@ -13,7 +14,7 @@ from app.repositories.tickets import TicketRepository
 def create_app(repository: TicketRepository | None = None) -> FastAPI:
     application = FastAPI(
         title="LocalFix API",
-        version="0.3.0",
+        version="0.4.0",
         description="Apartment maintenance workflow API.",
     )
     if repository is None:
@@ -23,6 +24,7 @@ def create_app(repository: TicketRepository | None = None) -> FastAPI:
     application.state.ticket_repository = repository
     application.include_router(tickets_router)
     application.include_router(manager_tickets_router)
+    application.include_router(worker_tickets_router)
 
     @application.exception_handler(RequestValidationError)
     async def request_validation_error(

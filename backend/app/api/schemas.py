@@ -12,7 +12,11 @@ from app.domain.tickets import (
     UrgencySuggestion,
     Worker,
 )
-from app.services.tickets import AssignTicketCommand, CreateTicketCommand
+from app.services.tickets import (
+    AssignTicketCommand,
+    CreateTicketCommand,
+    StartTicketCommand,
+)
 
 
 class TicketCreateRequest(BaseModel):
@@ -49,6 +53,13 @@ class TicketAssignmentRequest(BaseModel):
             priority=self.priority,
             worker_id=self.worker_id,
         )
+
+
+class TicketStartRequest(BaseModel):
+    expected_version: int = Field(ge=1)
+
+    def to_command(self) -> StartTicketCommand:
+        return StartTicketCommand(expected_version=self.expected_version)
 
 
 class WorkerResponse(BaseModel):

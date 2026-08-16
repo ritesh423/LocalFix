@@ -8,8 +8,8 @@ import androidx.compose.runtime.setValue
 import com.localfix.app.data.AppContainer
 import com.localfix.app.ui.navigation.ManagerNavigation
 import com.localfix.app.ui.navigation.ResidentNavigation
+import com.localfix.app.ui.navigation.WorkerNavigation
 import com.localfix.app.ui.role.RoleSelectionScreen
-import com.localfix.app.ui.role.RoleWorkspaceScreen
 import com.localfix.app.ui.session.AppRole
 import com.localfix.app.ui.theme.LocalFixTheme
 
@@ -32,8 +32,8 @@ fun LocalFixApp(appContainer: AppContainer) {
                 repository = appContainer.managerRepository,
                 onSwitchRole = { activeRoleName = null },
             )
-            AppRole.WORKER -> RoleWorkspaceScreen(
-                role = activeRole,
+            AppRole.WORKER -> WorkerNavigation(
+                repository = appContainer.workerRepository,
                 onSwitchRole = { activeRoleName = null },
             )
         }

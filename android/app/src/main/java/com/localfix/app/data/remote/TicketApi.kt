@@ -26,6 +26,15 @@ interface ManagerTicketApi {
     ): TicketResponse
 }
 
+interface WorkerTicketApi {
+    suspend fun listWorkerTickets(): List<TicketResponse>
+
+    suspend fun startTicket(
+        ticketId: String,
+        request: TicketStartPayload,
+    ): TicketResponse
+}
+
 @Serializable
 data class TicketCreatePayload(
     @SerialName("client_request_id") val clientRequestId: String,
@@ -41,6 +50,11 @@ data class TicketAssignmentPayload(
     @SerialName("expected_version") val expectedVersion: Int,
     val priority: String,
     @SerialName("worker_id") val workerId: String,
+)
+
+@Serializable
+data class TicketStartPayload(
+    @SerialName("expected_version") val expectedVersion: Int,
 )
 
 @Serializable
@@ -74,7 +88,7 @@ data class TicketResponse(
 class HttpTicketApi(
     baseUrl: String,
     private val json: Json = Json { ignoreUnknownKeys = true },
-) : TicketApi, ManagerTicketApi {
+) : TicketApi, ManagerTicketApi, WorkerTicketApi {
     private val baseUrl = baseUrl.trimEnd('/')
 
     override suspend fun createTicket(request: TicketCreatePayload): TicketResponse {
@@ -108,6 +122,23 @@ class HttpTicketApi(
         val responseBody = execute(
             method = "POST",
             path = "/manager/tickets/$ticketId/assignment",
+            requestBody = json.encodeToString(request),
+        )
+        return json.decodeFromString(responseBody)
+    }
+
+    override suspend fun listWorkerTickets(): List<TicketResponse> {
+        val responseBody = execute(method = "GET", path = "/worker/tickets")
+        return json.decodeFromString(responseBody)
+    }
+
+    override suspend fun startTicket(
+        ticketId: String,
+        request: TicketStartPayload,
+    ): TicketResponse {
+        val responseBody = execute(
+            method = "POST",
+            path = "/worker/tickets/$ticketId/start",
             requestBody = json.encodeToString(request),
         )
         return json.decodeFromString(responseBody)

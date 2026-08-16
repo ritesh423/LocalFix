@@ -100,6 +100,38 @@ class SqlAlchemyTicketRepository:
             record = session.scalar(statement)
             return _record_to_domain(record) if record is not None else None
 
+    def list_for_worker(
+        self,
+        property_id: UUID,
+        worker_id: UUID,
+    ) -> list[Ticket]:
+        statement = (
+            select(TicketRecord)
+            .where(
+                TicketRecord.property_id == property_id,
+                TicketRecord.assigned_worker_id == worker_id,
+            )
+            .order_by(TicketRecord.updated_at.desc())
+        )
+        with self._session_factory() as session:
+            records = session.scalars(statement).all()
+            return [_record_to_domain(record) for record in records]
+
+    def get_for_worker(
+        self,
+        ticket_id: UUID,
+        property_id: UUID,
+        worker_id: UUID,
+    ) -> Ticket | None:
+        statement = select(TicketRecord).where(
+            TicketRecord.id == ticket_id,
+            TicketRecord.property_id == property_id,
+            TicketRecord.assigned_worker_id == worker_id,
+        )
+        with self._session_factory() as session:
+            record = session.scalar(statement)
+            return _record_to_domain(record) if record is not None else None
+
     def update_if_version(
         self,
         ticket: Ticket,

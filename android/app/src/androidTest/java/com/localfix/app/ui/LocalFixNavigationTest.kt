@@ -15,6 +15,8 @@ import com.localfix.app.data.manager.ManagerRepository
 import com.localfix.app.data.manager.SampleManagerRepository
 import com.localfix.app.data.resident.ResidentRepository
 import com.localfix.app.data.resident.SampleResidentRepository
+import com.localfix.app.data.worker.SampleWorkerRepository
+import com.localfix.app.data.worker.WorkerRepository
 import org.junit.Rule
 import org.junit.Test
 
@@ -86,9 +88,26 @@ class LocalFixNavigationTest {
         composeRule.onNodeWithText("Assigned to Arun Kumar").assertIsDisplayed()
     }
 
+    @Test
+    fun workerCanOpenAnAssignedJobAndStartWork() {
+        composeRule.setContent {
+            LocalFixApp(testAppContainer())
+        }
+
+        composeRule.onNodeWithText("Maintenance worker").performClick()
+        composeRule.onNodeWithText("My jobs").assertIsDisplayed()
+        composeRule.onNodeWithText("Bathroom pipe is leaking").performClick()
+        composeRule.onNodeWithText("Morning · 8 AM–12 PM").assertIsDisplayed()
+        composeRule.onNodeWithTag("worker-start-job").performClick()
+
+        composeRule.onNodeWithText("Work started").assertIsDisplayed()
+        composeRule.onNodeWithText("In progress").assertIsDisplayed()
+    }
+
     private fun testAppContainer(): AppContainer = object : AppContainer {
         override val residentRepository: ResidentRepository = SampleResidentRepository()
         override val managerRepository: ManagerRepository = SampleManagerRepository()
+        override val workerRepository: WorkerRepository = SampleWorkerRepository()
         override val requestDraftRepository: RequestDraftRepository =
             InMemoryRequestDraftRepository()
     }

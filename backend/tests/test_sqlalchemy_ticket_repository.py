@@ -10,6 +10,7 @@ from alembic import command
 from app.api.dependencies import (
     DEMO_MANAGER_CONTEXT,
     DEMO_RESIDENT_CONTEXT,
+    DEMO_WORKER_CONTEXT,
     DEMO_WORKERS,
 )
 from app.database.session import create_database_engine, create_session_factory
@@ -21,7 +22,12 @@ from app.domain.tickets import (
     UrgencySuggestion,
 )
 from app.repositories.sqlalchemy_tickets import SqlAlchemyTicketRepository
-from app.services.tickets import AssignTicketCommand, CreateTicketCommand, TicketService
+from app.services.tickets import (
+    AssignTicketCommand,
+    CreateTicketCommand,
+    StartTicketCommand,
+    TicketService,
+)
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 
@@ -116,6 +122,45 @@ class SqlAlchemyTicketRepositoryTest(unittest.TestCase):
         self.assertEqual(restored.assigned_worker, "Arun Kumar")
         self.assertEqual(restored.status.value, "assigned")
 
+    def test_worker_start_survives_engine_recreation(self) -> None:
+        first_engine = create_database_engine(self.database_url)
+        first_service = TicketService(
+            SqlAlchemyTicketRepository(create_session_factory(first_engine)),
+            workers=DEMO_WORKERS,
+        )
+        created = first_service.create_ticket(
+            self.ticket_command(),
+            DEMO_RESIDENT_CONTEXT,
+        ).ticket
+        assigned = first_service.assign_ticket(
+            created.id,
+            AssignTicketCommand(
+                expected_version=1,
+                priority=TicketPriority.SOON,
+                worker_id=DEMO_WORKER_CONTEXT.worker_id,
+            ),
+            DEMO_MANAGER_CONTEXT,
+        )
+        started = first_service.start_ticket(
+            assigned.id,
+            StartTicketCommand(expected_version=assigned.version),
+            DEMO_WORKER_CONTEXT,
+        )
+        first_engine.dispose()
+
+        second_engine = create_database_engine(self.database_url)
+        second_service = TicketService(
+            SqlAlchemyTicketRepository(create_session_factory(second_engine))
+        )
+        restored = second_service.get_ticket(started.id, DEMO_RESIDENT_CONTEXT)
+        worker_queue = second_service.list_worker_tickets(DEMO_WORKER_CONTEXT)
+        second_engine.dispose()
+
+        self.assertIsNotNone(restored)
+        self.assertEqual(restored.status.value, "in_progress")
+        self.assertEqual(restored.version, 3)
+        self.assertEqual([ticket.id for ticket in worker_queue], [started.id])
+
     def test_manager_assignment_migration_preserves_existing_tickets(self) -> None:
         config = self.alembic_config()
         command.downgrade(config, "base")
@@ -165,6 +210,9 @@ class SqlAlchemyTicketRepositoryTest(unittest.TestCase):
         column_names = {
             column["name"] for column in inspect(migrated_engine).get_columns("tickets")
         }
+        index_names = {
+            index["name"] for index in inspect(migrated_engine).get_indexes("tickets")
+        }
         with migrated_engine.connect() as connection:
             restored_title = connection.scalar(
                 text("SELECT title FROM tickets WHERE id = :id"),
@@ -174,6 +222,7 @@ class SqlAlchemyTicketRepositoryTest(unittest.TestCase):
 
         self.assertIn("priority", column_names)
         self.assertIn("assigned_worker_id", column_names)
+        self.assertIn("ix_tickets_worker_status_updated", index_names)
         self.assertEqual(restored_title, "Existing ticket")
 
     def alembic_config(self) -> Config:

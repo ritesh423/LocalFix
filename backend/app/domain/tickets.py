@@ -46,6 +46,12 @@ class ManagerContext:
 
 
 @dataclass(frozen=True)
+class WorkerContext:
+    worker_id: UUID
+    property_id: UUID
+
+
+@dataclass(frozen=True)
 class Worker:
     id: UUID
     property_id: UUID
