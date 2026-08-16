@@ -60,6 +60,12 @@ fun WorkerNavigation(
                 uiState = uiState.detail,
                 onBack = { navController.popBackStack() },
                 onStartJob = workerViewModel::startJob,
+                onCompletionNoteChanged = workerViewModel::updateCompletionNote,
+                onPartsUsedChanged = workerViewModel::updatePartsUsed,
+                onPhotoSelected = workerViewModel::updateCompletionPhoto,
+                onPhotoRemoved = workerViewModel::removeCompletionPhoto,
+                onPhotoSelectionFailed = workerViewModel::reportCompletionPhotoFailure,
+                onSubmitCompletion = workerViewModel::submitCompletion,
             )
         }
     }

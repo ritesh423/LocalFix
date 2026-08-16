@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import DateTime, Index, Integer, String, UniqueConstraint, Uuid
+from sqlalchemy import JSON, DateTime, Index, Integer, String, UniqueConstraint, Uuid
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -44,5 +44,12 @@ class TicketRecord(Base):
     version: Mapped[int] = mapped_column(Integer)
     assigned_worker_id: Mapped[UUID | None] = mapped_column(Uuid(), nullable=True)
     assigned_worker: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    completion_note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    parts_used: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    completion_photo_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    completion_submitted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)

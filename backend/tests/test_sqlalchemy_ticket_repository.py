@@ -24,10 +24,13 @@ from app.domain.tickets import (
 from app.repositories.sqlalchemy_tickets import SqlAlchemyTicketRepository
 from app.services.tickets import (
     AssignTicketCommand,
+    CompletionPhoto,
     CreateTicketCommand,
     StartTicketCommand,
+    SubmitCompletionCommand,
     TicketService,
 )
+from app.storage.evidence import InMemoryEvidenceStorage
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 
@@ -161,6 +164,58 @@ class SqlAlchemyTicketRepositoryTest(unittest.TestCase):
         self.assertEqual(restored.version, 3)
         self.assertEqual([ticket.id for ticket in worker_queue], [started.id])
 
+    def test_worker_completion_evidence_survives_engine_recreation(self) -> None:
+        evidence_storage = InMemoryEvidenceStorage()
+        first_engine = create_database_engine(self.database_url)
+        first_service = TicketService(
+            SqlAlchemyTicketRepository(create_session_factory(first_engine)),
+            workers=DEMO_WORKERS,
+            evidence_storage=evidence_storage,
+        )
+        created = first_service.create_ticket(
+            self.ticket_command(),
+            DEMO_RESIDENT_CONTEXT,
+        ).ticket
+        assigned = first_service.assign_ticket(
+            created.id,
+            AssignTicketCommand(
+                expected_version=1,
+                priority=TicketPriority.SOON,
+                worker_id=DEMO_WORKER_CONTEXT.worker_id,
+            ),
+            DEMO_MANAGER_CONTEXT,
+        )
+        started = first_service.start_ticket(
+            assigned.id,
+            StartTicketCommand(expected_version=assigned.version),
+            DEMO_WORKER_CONTEXT,
+        )
+        completed = first_service.submit_completion(
+            started.id,
+            SubmitCompletionCommand(
+                expected_version=started.version,
+                completion_note="Replaced the washer and checked for leaks.",
+                parts_used=("Rubber washer",),
+                photo=CompletionPhoto("image/jpeg", b"repair evidence"),
+            ),
+            DEMO_WORKER_CONTEXT,
+        )
+        first_engine.dispose()
+
+        second_engine = create_database_engine(self.database_url)
+        second_service = TicketService(
+            SqlAlchemyTicketRepository(create_session_factory(second_engine))
+        )
+        restored = second_service.get_ticket(completed.id, DEMO_RESIDENT_CONTEXT)
+        second_engine.dispose()
+
+        self.assertIsNotNone(restored)
+        self.assertEqual(restored.status.value, "awaiting_confirmation")
+        self.assertEqual(restored.completion_note, completed.completion_note)
+        self.assertEqual(restored.parts_used, ("Rubber washer",))
+        self.assertIsNotNone(restored.completion_photo_key)
+        self.assertEqual(len(evidence_storage.content_by_key), 1)
+
     def test_manager_assignment_migration_preserves_existing_tickets(self) -> None:
         config = self.alembic_config()
         command.downgrade(config, "base")
@@ -222,6 +277,9 @@ class SqlAlchemyTicketRepositoryTest(unittest.TestCase):
 
         self.assertIn("priority", column_names)
         self.assertIn("assigned_worker_id", column_names)
+        self.assertIn("completion_note", column_names)
+        self.assertIn("parts_used", column_names)
+        self.assertIn("completion_photo_key", column_names)
         self.assertIn("ix_tickets_worker_status_updated", index_names)
         self.assertEqual(restored_title, "Existing ticket")
 

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -5,16 +7,20 @@ from fastapi.responses import JSONResponse
 from app.api.routes.manager_tickets import router as manager_tickets_router
 from app.api.routes.tickets import router as tickets_router
 from app.api.routes.worker_tickets import router as worker_tickets_router
-from app.database.config import get_database_url
+from app.database.config import get_database_url, get_evidence_directory
 from app.database.session import create_database_engine, create_session_factory
 from app.repositories.sqlalchemy_tickets import SqlAlchemyTicketRepository
 from app.repositories.tickets import TicketRepository
+from app.storage.evidence import EvidenceStorage, LocalEvidenceStorage
 
 
-def create_app(repository: TicketRepository | None = None) -> FastAPI:
+def create_app(
+    repository: TicketRepository | None = None,
+    evidence_storage: EvidenceStorage | None = None,
+) -> FastAPI:
     application = FastAPI(
         title="LocalFix API",
-        version="0.4.0",
+        version="0.5.0",
         description="Apartment maintenance workflow API.",
     )
     if repository is None:
@@ -22,6 +28,9 @@ def create_app(repository: TicketRepository | None = None) -> FastAPI:
         application.state.database_engine = engine
         repository = SqlAlchemyTicketRepository(create_session_factory(engine))
     application.state.ticket_repository = repository
+    application.state.evidence_storage = evidence_storage or LocalEvidenceStorage(
+        Path(get_evidence_directory())
+    )
     application.include_router(tickets_router)
     application.include_router(manager_tickets_router)
     application.include_router(worker_tickets_router)

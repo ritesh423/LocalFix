@@ -3,6 +3,7 @@ package com.localfix.app.data.worker
 import com.localfix.app.data.model.ServiceCategory
 import com.localfix.app.data.model.TicketStatus
 import com.localfix.app.data.remote.TicketResponse
+import com.localfix.app.data.remote.TicketCompletionPayload
 import com.localfix.app.data.remote.TicketStartPayload
 import com.localfix.app.data.remote.WorkerTicketApi
 import java.io.IOException
@@ -52,6 +53,35 @@ class ApiWorkerRepositoryTest {
     }
 
     @Test
+    fun completionSendsStructuredEvidenceAndUpdatesTheJob() = runTest {
+        val api = FakeWorkerApi()
+        val repository = ApiWorkerRepository(api, clock)
+        repository.refresh()
+
+        repository.submitCompletion(
+            ticketId = TICKET_ID,
+            expectedVersion = 2,
+            completionNote = "Replaced the washer and tested the tap.",
+            partsUsed = listOf("Rubber washer"),
+            photoUri = "content://localfix/completion-photo",
+        )
+
+        assertEquals(
+            TicketCompletionPayload(
+                expectedVersion = 2,
+                completionNote = "Replaced the washer and tested the tap.",
+                partsUsed = listOf("Rubber washer"),
+                photoUri = "content://localfix/completion-photo",
+            ),
+            api.lastCompletionPayload,
+        )
+        val job = repository.workerData.value.jobs.single()
+        assertEquals(TicketStatus.AWAITING_CONFIRMATION, job.status)
+        assertEquals("Replaced the washer and tested the tap.", job.completionNote)
+        assertTrue(job.hasCompletionPhoto)
+    }
+
+    @Test
     fun failedFirstRefreshShowsAnErrorWithoutInventingJobs() = runTest {
         val repository = ApiWorkerRepository(
             ticketApi = FakeWorkerApi(listFailure = IOException("offline")),
@@ -69,6 +99,7 @@ class ApiWorkerRepositoryTest {
         private val listFailure: Throwable? = null,
     ) : WorkerTicketApi {
         var lastStartPayload: TicketStartPayload? = null
+        var lastCompletionPayload: TicketCompletionPayload? = null
 
         override suspend fun listWorkerTickets(): List<TicketResponse> {
             listFailure?.let { throw it }
@@ -84,6 +115,23 @@ class ApiWorkerRepositoryTest {
             return ticketResponse().copy(
                 status = "in_progress",
                 version = 3,
+                updatedAt = "2026-08-16T10:15:00Z",
+            )
+        }
+
+        override suspend fun submitCompletion(
+            ticketId: String,
+            request: TicketCompletionPayload,
+        ): TicketResponse {
+            assertEquals(TICKET_ID, ticketId)
+            lastCompletionPayload = request
+            return ticketResponse().copy(
+                status = "awaiting_confirmation",
+                version = 3,
+                completionNote = request.completionNote,
+                partsUsed = request.partsUsed,
+                hasCompletionPhoto = true,
+                completionSubmittedAt = "2026-08-16T10:15:00Z",
                 updatedAt = "2026-08-16T10:15:00Z",
             )
         }

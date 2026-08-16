@@ -81,6 +81,109 @@ class WorkerViewModel(
         }
     }
 
+    fun updateCompletionNote(value: String) {
+        selection.update { current ->
+            current.copy(
+                completionNote = value.take(500),
+                completionNoteError = null,
+                completionSubmissionError = null,
+            )
+        }
+    }
+
+    fun updatePartsUsed(value: String) {
+        selection.update { current ->
+            current.copy(
+                partsUsed = value.take(500),
+                partsUsedError = null,
+                completionSubmissionError = null,
+            )
+        }
+    }
+
+    fun updateCompletionPhoto(photoUri: String) {
+        selection.update { current ->
+            current.copy(
+                photoUri = photoUri,
+                photoError = null,
+                completionSubmissionError = null,
+            )
+        }
+    }
+
+    fun removeCompletionPhoto() {
+        selection.update { current -> current.copy(photoUri = null, photoError = null) }
+    }
+
+    fun reportCompletionPhotoFailure() {
+        selection.update { current ->
+            current.copy(photoError = "That photo couldn't be kept. Choose another image.")
+        }
+    }
+
+    fun submitCompletion() {
+        val detail = uiState.value.detail
+        val job = detail.job ?: return
+        if (!job.canSubmitCompletion || detail.isSubmittingCompletion) return
+        val current = selection.value
+        val noteError = if (current.completionNote.trim().length < 10) {
+            "Describe the completed repair in at least 10 characters"
+        } else {
+            null
+        }
+        val parts = current.partsUsed.toPartsList()
+        val partsError = if (parts.size > 10 || parts.any { it.length > 80 }) {
+            "Use at most 10 comma-separated parts, each under 80 characters"
+        } else {
+            null
+        }
+        val photoError = if (current.photoUri == null) {
+            "Add an after-repair photo"
+        } else {
+            null
+        }
+        if (noteError != null || partsError != null || photoError != null) {
+            selection.update {
+                it.copy(
+                    completionNoteError = noteError,
+                    partsUsedError = partsError,
+                    photoError = photoError,
+                )
+            }
+            return
+        }
+
+        selection.update {
+            it.copy(isSubmittingCompletion = true, completionSubmissionError = null)
+        }
+        viewModelScope.launch {
+            runCatching {
+                repository.submitCompletion(
+                    ticketId = job.id,
+                    expectedVersion = job.version,
+                    completionNote = current.completionNote.trim(),
+                    partsUsed = parts,
+                    photoUri = requireNotNull(current.photoUri),
+                )
+            }.onSuccess {
+                selection.update { state ->
+                    state.copy(
+                        isSubmittingCompletion = false,
+                        hasJustSubmittedCompletion = true,
+                    )
+                }
+            }.onFailure {
+                selection.update { state ->
+                    state.copy(
+                        isSubmittingCompletion = false,
+                        completionSubmissionError =
+                            "Couldn't submit this repair. Check the photo and try again.",
+                    )
+                }
+            }
+        }
+    }
+
     companion object {
         fun factory(repository: WorkerRepository): ViewModelProvider.Factory =
             viewModelFactory {
@@ -94,6 +197,15 @@ private data class WorkerSelection(
     val isStarting: Boolean = false,
     val startError: String? = null,
     val hasJustStarted: Boolean = false,
+    val completionNote: String = "",
+    val partsUsed: String = "",
+    val photoUri: String? = null,
+    val completionNoteError: String? = null,
+    val partsUsedError: String? = null,
+    val photoError: String? = null,
+    val isSubmittingCompletion: Boolean = false,
+    val completionSubmissionError: String? = null,
+    val hasJustSubmittedCompletion: Boolean = false,
 )
 
 private fun createWorkerUiState(
@@ -116,6 +228,19 @@ private fun createWorkerUiState(
             isStarting = selection.isStarting,
             startError = selection.startError,
             hasJustStarted = selection.hasJustStarted,
+            completionDraft = WorkerCompletionDraft(
+                completionNote = selection.completionNote,
+                partsUsed = selection.partsUsed,
+                photoUri = selection.photoUri,
+            ),
+            completionErrors = WorkerCompletionErrors(
+                completionNote = selection.completionNoteError,
+                partsUsed = selection.partsUsedError,
+                photo = selection.photoError,
+            ),
+            isSubmittingCompletion = selection.isSubmittingCompletion,
+            completionSubmissionError = selection.completionSubmissionError,
+            hasJustSubmittedCompletion = selection.hasJustSubmittedCompletion,
         ),
     )
 }
@@ -162,7 +287,15 @@ private fun WorkerJob.toDetail() = WorkerJobDetail(
     statusTone = status.tone,
     version = version,
     canStart = status == TicketStatus.ASSIGNED,
+    canSubmitCompletion = status == TicketStatus.IN_PROGRESS,
+    completionNote = completionNote,
+    partsUsed = partsUsed,
+    hasCompletionPhoto = hasCompletionPhoto,
 )
+
+private fun String.toPartsList(): List<String> = split(',')
+    .map(String::trim)
+    .filter(String::isNotEmpty)
 
 private val TicketStatus.label: String
     get() = when (this) {

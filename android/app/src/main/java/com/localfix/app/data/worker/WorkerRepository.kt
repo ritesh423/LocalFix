@@ -12,6 +12,14 @@ interface WorkerRepository {
         ticketId: String,
         expectedVersion: Int,
     ): WorkerJob
+
+    suspend fun submitCompletion(
+        ticketId: String,
+        expectedVersion: Int,
+        completionNote: String,
+        partsUsed: List<String>,
+        photoUri: String,
+    ): WorkerJob
 }
 
 sealed interface WorkerSyncState {

@@ -1,5 +1,9 @@
 package com.localfix.app.ui.worker
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -15,10 +19,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.AccessTime
+import androidx.compose.material.icons.outlined.AddPhotoAlternate
 import androidx.compose.material.icons.outlined.Build
+import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.PriorityHigh
 import androidx.compose.material3.Button
@@ -26,16 +33,24 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import coil3.compose.AsyncImage
 import com.localfix.app.ui.components.RequestStatusBadge
+import com.localfix.app.ui.components.persistPhotoAccess
+import com.localfix.app.ui.components.releasePhotoAccess
 import com.localfix.app.ui.requests.RequestStatusTone
 import com.localfix.app.ui.theme.LocalFixRadius
 import com.localfix.app.ui.theme.LocalFixSpacing
@@ -46,12 +61,38 @@ fun WorkerJobDetailScreen(
     uiState: WorkerJobDetailUiState,
     onBack: () -> Unit,
     onStartJob: () -> Unit,
+    onCompletionNoteChanged: (String) -> Unit,
+    onPartsUsedChanged: (String) -> Unit,
+    onPhotoSelected: (String) -> Unit,
+    onPhotoRemoved: () -> Unit,
+    onPhotoSelectionFailed: () -> Unit,
+    onSubmitCompletion: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val job = uiState.job
     if (job == null) {
         MissingWorkerJob(onBack = onBack, modifier = modifier)
         return
+    }
+    val context = LocalContext.current
+    val photoPicker = rememberLauncherForActivityResult(PickVisualMedia()) { uri ->
+        if (uri != null) {
+            val previousPhotoUri = uiState.completionDraft.photoUri
+            if (persistPhotoAccess(context, uri)) {
+                onPhotoSelected(uri.toString())
+                if (previousPhotoUri != null && previousPhotoUri != uri.toString()) {
+                    releasePhotoAccess(context, previousPhotoUri)
+                }
+            } else {
+                onPhotoSelectionFailed()
+            }
+        }
+    }
+    LaunchedEffect(uiState.hasJustSubmittedCompletion) {
+        if (uiState.hasJustSubmittedCompletion) {
+            uiState.completionDraft.photoUri?.let { releasePhotoAccess(context, it) }
+            onPhotoRemoved()
+        }
     }
 
     LazyColumn(
@@ -151,7 +192,7 @@ fun WorkerJobDetailScreen(
                     }
                 }
             }
-        } else {
+        } else if (job.canSubmitCompletion) {
             item {
                 Surface(
                     modifier = Modifier
@@ -163,11 +204,7 @@ fun WorkerJobDetailScreen(
                 ) {
                     Column(modifier = Modifier.padding(LocalFixSpacing.medium)) {
                         Text(
-                            text = if (uiState.hasJustStarted) {
-                                "Work started"
-                            } else {
-                                job.statusLabel
-                            },
+                            text = if (uiState.hasJustStarted) "Work started" else job.statusLabel,
                             style = MaterialTheme.typography.titleMedium,
                         )
                         Text(
@@ -178,8 +215,248 @@ fun WorkerJobDetailScreen(
                     }
                 }
             }
+            item {
+                CompletionEvidenceForm(
+                    uiState = uiState,
+                    onCompletionNoteChanged = onCompletionNoteChanged,
+                    onPartsUsedChanged = onPartsUsedChanged,
+                    onChoosePhoto = {
+                        photoPicker.launch(
+                            PickVisualMediaRequest(PickVisualMedia.ImageOnly),
+                        )
+                    },
+                    onRemovePhoto = {
+                        uiState.completionDraft.photoUri?.let {
+                            releasePhotoAccess(context, it)
+                        }
+                        onPhotoRemoved()
+                    },
+                    onSubmit = onSubmitCompletion,
+                )
+            }
+        } else {
+            item {
+                SubmittedCompletionCard(job = job, justSubmitted = uiState.hasJustSubmittedCompletion)
+            }
         }
         item { Spacer(modifier = Modifier.height(LocalFixSpacing.extraLarge)) }
+    }
+}
+
+@Composable
+private fun CompletionEvidenceForm(
+    uiState: WorkerJobDetailUiState,
+    onCompletionNoteChanged: (String) -> Unit,
+    onPartsUsedChanged: (String) -> Unit,
+    onChoosePhoto: () -> Unit,
+    onRemovePhoto: () -> Unit,
+    onSubmit: () -> Unit,
+) {
+    Column(
+        modifier = Modifier.padding(
+            horizontal = LocalFixSpacing.medium,
+            vertical = LocalFixSpacing.small,
+        ),
+    ) {
+        Text("Completion evidence", style = MaterialTheme.typography.titleLarge)
+        Text(
+            text = "Show what was repaired before sending it to the resident.",
+            modifier = Modifier.padding(top = LocalFixSpacing.extraSmall),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        OutlinedTextField(
+            value = uiState.completionDraft.completionNote,
+            onValueChange = onCompletionNoteChanged,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = LocalFixSpacing.medium)
+                .testTag("worker-completion-note"),
+            label = { Text("Work completed") },
+            placeholder = { Text("Replaced the worn washer and tested the tap") },
+            supportingText = {
+                Text(
+                    uiState.completionErrors.completionNote
+                        ?: "${uiState.completionDraft.completionNote.length}/500",
+                )
+            },
+            isError = uiState.completionErrors.completionNote != null,
+            minLines = 3,
+            maxLines = 5,
+        )
+        OutlinedTextField(
+            value = uiState.completionDraft.partsUsed,
+            onValueChange = onPartsUsedChanged,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = LocalFixSpacing.small)
+                .testTag("worker-parts-used"),
+            label = { Text("Parts used (optional)") },
+            placeholder = { Text("Rubber washer, thread seal tape") },
+            supportingText = {
+                Text(
+                    uiState.completionErrors.partsUsed
+                        ?: "Separate multiple parts with commas.",
+                )
+            },
+            isError = uiState.completionErrors.partsUsed != null,
+            singleLine = true,
+        )
+        Spacer(modifier = Modifier.height(LocalFixSpacing.medium))
+        CompletionPhotoPicker(
+            photoUri = uiState.completionDraft.photoUri,
+            error = uiState.completionErrors.photo,
+            onChoosePhoto = onChoosePhoto,
+            onRemovePhoto = onRemovePhoto,
+        )
+        uiState.completionSubmissionError?.let { error ->
+            Text(
+                text = error,
+                modifier = Modifier.padding(top = LocalFixSpacing.small),
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        Button(
+            onClick = onSubmit,
+            enabled = !uiState.isSubmittingCompletion,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = LocalFixSpacing.medium)
+                .testTag("worker-submit-completion"),
+            shape = RoundedCornerShape(LocalFixRadius.medium),
+        ) {
+            if (uiState.isSubmittingCompletion) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    strokeWidth = 2.dp,
+                )
+            } else {
+                Text("Send for resident confirmation")
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompletionPhotoPicker(
+    photoUri: String?,
+    error: String?,
+    onChoosePhoto: () -> Unit,
+    onRemovePhoto: () -> Unit,
+) {
+    if (photoUri == null) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(LocalFixRadius.large),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        ) {
+            Column(
+                modifier = Modifier.padding(LocalFixSpacing.large),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Surface(
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    shape = CircleShape,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.AddPhotoAlternate,
+                        contentDescription = null,
+                        modifier = Modifier.padding(LocalFixSpacing.small),
+                    )
+                }
+                Spacer(modifier = Modifier.height(LocalFixSpacing.small))
+                Text("Add an after-repair photo", style = MaterialTheme.typography.titleMedium)
+                OutlinedButton(
+                    onClick = onChoosePhoto,
+                    modifier = Modifier
+                        .padding(top = LocalFixSpacing.small)
+                        .testTag("choose-completion-photo"),
+                ) {
+                    Text("Choose photo")
+                }
+            }
+        }
+    } else {
+        Column {
+            AsyncImage(
+                model = Uri.parse(photoUri),
+                contentDescription = "Selected completion photo",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(190.dp)
+                    .testTag("completion-photo-preview"),
+                contentScale = ContentScale.Crop,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "After-repair photo attached",
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                OutlinedButton(onClick = onChoosePhoto) { Text("Replace") }
+                IconButton(onClick = onRemovePhoto) {
+                    Icon(
+                        imageVector = Icons.Outlined.DeleteOutline,
+                        contentDescription = "Remove completion photo",
+                    )
+                }
+            }
+        }
+    }
+    error?.let {
+        Text(
+            text = it,
+            modifier = Modifier.padding(top = LocalFixSpacing.small),
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodySmall,
+        )
+    }
+}
+
+@Composable
+private fun SubmittedCompletionCard(
+    job: WorkerJobDetail,
+    justSubmitted: Boolean,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(LocalFixSpacing.medium),
+        color = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        shape = RoundedCornerShape(LocalFixRadius.large),
+    ) {
+        Column(modifier = Modifier.padding(LocalFixSpacing.medium)) {
+            Text(
+                text = if (justSubmitted) "Sent to the resident" else job.statusLabel,
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Text(
+                text = "The resident can now review and confirm the repair.",
+                modifier = Modifier.padding(top = LocalFixSpacing.extraSmall),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            job.completionNote?.let {
+                Text(
+                    text = it,
+                    modifier = Modifier.padding(top = LocalFixSpacing.medium),
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+            }
+            if (job.partsUsed.isNotEmpty()) {
+                Text(
+                    text = "Parts: ${job.partsUsed.joinToString()}",
+                    modifier = Modifier.padding(top = LocalFixSpacing.small),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
     }
 }
 
@@ -345,10 +622,20 @@ private fun WorkerJobDetailPreview() {
                     statusTone = RequestStatusTone.ACTIVE,
                     version = 2,
                     canStart = true,
+                    canSubmitCompletion = false,
+                    completionNote = null,
+                    partsUsed = emptyList(),
+                    hasCompletionPhoto = false,
                 ),
             ),
             onBack = {},
             onStartJob = {},
+            onCompletionNoteChanged = {},
+            onPartsUsedChanged = {},
+            onPhotoSelected = {},
+            onPhotoRemoved = {},
+            onPhotoSelectionFailed = {},
+            onSubmitCompletion = {},
         )
     }
 }

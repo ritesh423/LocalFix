@@ -12,6 +12,7 @@ from app.domain.tickets import (
 )
 from app.repositories.tickets import TicketRepository
 from app.services.tickets import TicketService
+from app.storage.evidence import EvidenceStorage
 
 DEMO_RESIDENT_CONTEXT = ResidentContext(
     user_id=UUID("10000000-0000-0000-0000-000000000001"),
@@ -58,10 +59,19 @@ def get_ticket_repository(request: Request) -> TicketRepository:
     return request.app.state.ticket_repository
 
 
+def get_evidence_storage(request: Request) -> EvidenceStorage:
+    return request.app.state.evidence_storage
+
+
 def get_ticket_service(
     repository: Annotated[TicketRepository, Depends(get_ticket_repository)],
+    evidence_storage: Annotated[EvidenceStorage, Depends(get_evidence_storage)],
 ) -> TicketService:
-    return TicketService(repository, workers=DEMO_WORKERS)
+    return TicketService(
+        repository,
+        workers=DEMO_WORKERS,
+        evidence_storage=evidence_storage,
+    )
 
 
 def get_resident_context() -> ResidentContext:

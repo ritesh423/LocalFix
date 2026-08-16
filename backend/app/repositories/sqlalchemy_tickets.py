@@ -150,6 +150,10 @@ class SqlAlchemyTicketRepository:
                 version=ticket.version,
                 assigned_worker_id=ticket.assigned_worker_id,
                 assigned_worker=ticket.assigned_worker,
+                completion_note=ticket.completion_note,
+                parts_used=list(ticket.parts_used),
+                completion_photo_key=ticket.completion_photo_key,
+                completion_submitted_at=ticket.completion_submitted_at,
                 updated_at=ticket.updated_at,
             )
         )
@@ -190,6 +194,10 @@ def _record_from_domain(ticket: Ticket) -> TicketRecord:
         version=ticket.version,
         assigned_worker_id=ticket.assigned_worker_id,
         assigned_worker=ticket.assigned_worker,
+        completion_note=ticket.completion_note,
+        parts_used=list(ticket.parts_used),
+        completion_photo_key=ticket.completion_photo_key,
+        completion_submitted_at=ticket.completion_submitted_at,
         created_at=ticket.created_at,
         updated_at=ticket.updated_at,
     )
@@ -214,6 +222,12 @@ def _record_to_domain(record: TicketRecord) -> Ticket:
         version=record.version,
         assigned_worker_id=record.assigned_worker_id,
         assigned_worker=record.assigned_worker,
+        completion_note=record.completion_note,
+        parts_used=tuple(record.parts_used or ()),
+        completion_photo_key=record.completion_photo_key,
+        completion_submitted_at=_ensure_utc(record.completion_submitted_at)
+        if record.completion_submitted_at is not None
+        else None,
         created_at=_ensure_utc(record.created_at),
         updated_at=_ensure_utc(record.updated_at),
     )

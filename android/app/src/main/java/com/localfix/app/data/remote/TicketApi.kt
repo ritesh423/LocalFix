@@ -1,5 +1,7 @@
 package com.localfix.app.data.remote
 
+import android.content.ContentResolver
+import android.net.Uri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
@@ -8,6 +10,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.UUID
 
 interface TicketApi {
     suspend fun createTicket(request: TicketCreatePayload): TicketResponse
@@ -33,6 +36,11 @@ interface WorkerTicketApi {
         ticketId: String,
         request: TicketStartPayload,
     ): TicketResponse
+
+    suspend fun submitCompletion(
+        ticketId: String,
+        request: TicketCompletionPayload,
+    ): TicketResponse
 }
 
 @Serializable
@@ -55,6 +63,13 @@ data class TicketAssignmentPayload(
 @Serializable
 data class TicketStartPayload(
     @SerialName("expected_version") val expectedVersion: Int,
+)
+
+data class TicketCompletionPayload(
+    val expectedVersion: Int,
+    val completionNote: String,
+    val partsUsed: List<String>,
+    val photoUri: String,
 )
 
 @Serializable
@@ -81,12 +96,17 @@ data class TicketResponse(
     val version: Int,
     @SerialName("assigned_worker_id") val assignedWorkerId: String? = null,
     @SerialName("assigned_worker") val assignedWorker: String?,
+    @SerialName("completion_note") val completionNote: String? = null,
+    @SerialName("parts_used") val partsUsed: List<String> = emptyList(),
+    @SerialName("has_completion_photo") val hasCompletionPhoto: Boolean = false,
+    @SerialName("completion_submitted_at") val completionSubmittedAt: String? = null,
     @SerialName("created_at") val createdAt: String,
     @SerialName("updated_at") val updatedAt: String,
 )
 
 class HttpTicketApi(
     baseUrl: String,
+    private val contentResolver: ContentResolver,
     private val json: Json = Json { ignoreUnknownKeys = true },
 ) : TicketApi, ManagerTicketApi, WorkerTicketApi {
     private val baseUrl = baseUrl.trimEnd('/')
@@ -144,6 +164,77 @@ class HttpTicketApi(
         return json.decodeFromString(responseBody)
     }
 
+    override suspend fun submitCompletion(
+        ticketId: String,
+        request: TicketCompletionPayload,
+    ): TicketResponse {
+        val responseBody = executeCompletionUpload(ticketId, request)
+        return json.decodeFromString(responseBody)
+    }
+
+    private suspend fun executeCompletionUpload(
+        ticketId: String,
+        request: TicketCompletionPayload,
+    ): String = withContext(Dispatchers.IO) {
+        val photoUri = Uri.parse(request.photoUri)
+        val contentType = contentResolver.getType(photoUri) ?: "image/jpeg"
+        val boundary = "LocalFix-${UUID.randomUUID()}"
+        val connection = URL("$baseUrl/worker/tickets/$ticketId/completion")
+            .openConnection() as HttpURLConnection
+        try {
+            connection.requestMethod = "POST"
+            connection.connectTimeout = CONNECT_TIMEOUT_MILLIS
+            connection.readTimeout = READ_TIMEOUT_MILLIS
+            connection.doOutput = true
+            connection.setChunkedStreamingMode(64 * 1024)
+            connection.setRequestProperty("Accept", "application/json")
+            connection.setRequestProperty(
+                "Content-Type",
+                "multipart/form-data; boundary=$boundary",
+            )
+            connection.outputStream.buffered().use { output ->
+                fun writeText(value: String) {
+                    output.write(value.toByteArray(Charsets.UTF_8))
+                }
+
+                fun writeField(name: String, value: String) {
+                    writeText("--$boundary\r\n")
+                    writeText("Content-Disposition: form-data; name=\"$name\"\r\n\r\n")
+                    writeText(value)
+                    writeText("\r\n")
+                }
+
+                writeField("expected_version", request.expectedVersion.toString())
+                writeField("completion_note", request.completionNote)
+                request.partsUsed.forEach { part -> writeField("parts_used", part) }
+                writeText("--$boundary\r\n")
+                writeText(
+                    "Content-Disposition: form-data; name=\"photo\"; " +
+                        "filename=\"completion-photo.${contentType.toExtension()}\"\r\n",
+                )
+                writeText("Content-Type: $contentType\r\n\r\n")
+                val input = requireNotNull(contentResolver.openInputStream(photoUri)) {
+                    "The selected completion photo is no longer available."
+                }
+                input.use { it.copyTo(output) }
+                writeText("\r\n--$boundary--\r\n")
+            }
+
+            val statusCode = connection.responseCode
+            val responseText = (if (statusCode in 200..299) {
+                connection.inputStream
+            } else {
+                connection.errorStream
+            })?.bufferedReader()?.use { it.readText() }.orEmpty()
+            if (statusCode !in 200..299) {
+                throw TicketApiException(statusCode, responseText)
+            }
+            responseText
+        } finally {
+            connection.disconnect()
+        }
+    }
+
     private suspend fun execute(
         method: String,
         path: String,
@@ -183,6 +274,14 @@ class HttpTicketApi(
         const val CONNECT_TIMEOUT_MILLIS = 5_000
         const val READ_TIMEOUT_MILLIS = 10_000
     }
+}
+
+private fun String.toExtension(): String = when (this) {
+    "image/png" -> "png"
+    "image/webp" -> "webp"
+    "image/heic" -> "heic"
+    "image/heif" -> "heif"
+    else -> "jpg"
 }
 
 class TicketApiException(

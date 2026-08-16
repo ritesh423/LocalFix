@@ -92,6 +92,10 @@ class TicketResponse(BaseModel):
     version: int
     assigned_worker_id: UUID | None
     assigned_worker: str | None
+    completion_note: str | None
+    parts_used: list[str]
+    has_completion_photo: bool
+    completion_submitted_at: datetime | None
     created_at: datetime
     updated_at: datetime
 
@@ -113,6 +117,10 @@ class TicketResponse(BaseModel):
             version=ticket.version,
             assigned_worker_id=ticket.assigned_worker_id,
             assigned_worker=ticket.assigned_worker,
+            completion_note=ticket.completion_note,
+            parts_used=list(ticket.parts_used),
+            has_completion_photo=ticket.completion_photo_key is not None,
+            completion_submitted_at=ticket.completion_submitted_at,
             created_at=ticket.created_at,
             updated_at=ticket.updated_at,
         )

@@ -5,6 +5,7 @@ import com.localfix.app.data.model.ServiceCategory
 import com.localfix.app.data.model.TicketStatus
 import com.localfix.app.data.model.UrgencySuggestion
 import com.localfix.app.data.remote.TicketResponse
+import com.localfix.app.data.remote.TicketCompletionPayload
 import com.localfix.app.data.remote.TicketStartPayload
 import com.localfix.app.data.remote.WorkerTicketApi
 import java.time.Clock
@@ -67,6 +68,32 @@ class ApiWorkerRepository(
         return started
     }
 
+    override suspend fun submitCompletion(
+        ticketId: String,
+        expectedVersion: Int,
+        completionNote: String,
+        partsUsed: List<String>,
+        photoUri: String,
+    ): WorkerJob {
+        val completed = ticketApi.submitCompletion(
+            ticketId = ticketId,
+            request = TicketCompletionPayload(
+                expectedVersion = expectedVersion,
+                completionNote = completionNote,
+                partsUsed = partsUsed,
+                photoUri = photoUri,
+            ),
+        ).toWorkerJob(clock)
+        mutableWorkerData.update { data ->
+            data.copy(
+                jobs = data.jobs.map { existing ->
+                    if (existing.id == completed.id) completed else existing
+                },
+            )
+        }
+        return completed
+    }
+
     private companion object {
         const val CONNECTION_ERROR =
             "We couldn't reach LocalFix. Check your connection and try again."
@@ -91,6 +118,9 @@ private fun TicketResponse.toWorkerJob(clock: Clock): WorkerJob = WorkerJob(
     accessWindow = AccessWindow.valueOf(accessWindow.uppercase()),
     status = TicketStatus.valueOf(status.uppercase()),
     version = version,
+    completionNote = completionNote,
+    partsUsed = partsUsed,
+    hasCompletionPhoto = hasCompletionPhoto,
     updatedLabel = updatedAt.toUpdatedLabel(clock),
 )
 

@@ -77,5 +77,9 @@ class Ticket:
     version: int
     assigned_worker_id: UUID | None
     assigned_worker: str | None
+    completion_note: str | None
+    parts_used: tuple[str, ...]
+    completion_photo_key: str | None
+    completion_submitted_at: datetime | None
     created_at: datetime
     updated_at: datetime

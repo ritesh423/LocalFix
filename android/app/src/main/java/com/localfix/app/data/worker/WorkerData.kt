@@ -23,5 +23,8 @@ data class WorkerJob(
     val accessWindow: AccessWindow,
     val status: TicketStatus,
     val version: Int,
+    val completionNote: String?,
+    val partsUsed: List<String>,
+    val hasCompletionPhoto: Boolean,
     val updatedLabel: String,
 )

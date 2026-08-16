@@ -61,6 +61,49 @@ class WorkerViewModelTest {
         assertEquals(2, viewModel.uiState.value.queue.inProgressCount)
     }
 
+    @Test
+    fun emptyCompletionFormShowsRequiredEvidenceErrors() = runTest {
+        val viewModel = WorkerViewModel(SampleWorkerRepository())
+        advanceUntilIdle()
+        viewModel.openJob(IN_PROGRESS_JOB_ID)
+        advanceUntilIdle()
+
+        viewModel.submitCompletion()
+        advanceUntilIdle()
+
+        val errors = viewModel.uiState.value.detail.completionErrors
+        assertEquals(
+            "Describe the completed repair in at least 10 characters",
+            errors.completionNote,
+        )
+        assertEquals("Add an after-repair photo", errors.photo)
+        assertEquals("In progress", viewModel.uiState.value.detail.job?.statusLabel)
+    }
+
+    @Test
+    fun validCompletionMovesJobToResidentConfirmation() = runTest {
+        val viewModel = WorkerViewModel(SampleWorkerRepository())
+        advanceUntilIdle()
+        viewModel.openJob(IN_PROGRESS_JOB_ID)
+        advanceUntilIdle()
+        viewModel.updateCompletionNote("Cleared the drain and tested the water flow.")
+        viewModel.updatePartsUsed("Drain seal, cleaning solution")
+        viewModel.updateCompletionPhoto("content://localfix/completion/kitchen-sink")
+        advanceUntilIdle()
+
+        viewModel.submitCompletion()
+        advanceUntilIdle()
+
+        val detail = viewModel.uiState.value.detail
+        assertTrue(detail.hasJustSubmittedCompletion)
+        assertEquals("Awaiting confirmation", detail.job?.statusLabel)
+        assertFalse(detail.job?.canSubmitCompletion == true)
+        assertEquals(
+            listOf("Drain seal", "cleaning solution"),
+            detail.job?.partsUsed,
+        )
+    }
+
     private companion object {
         const val ASSIGNED_JOB_ID = "90000000-0000-0000-0000-000000000001"
         const val IN_PROGRESS_JOB_ID = "90000000-0000-0000-0000-000000000002"

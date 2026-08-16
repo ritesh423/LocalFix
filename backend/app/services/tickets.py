@@ -21,6 +21,7 @@ from app.domain.tickets import (
     WorkerContext,
 )
 from app.repositories.tickets import TicketRepository
+from app.storage.evidence import EvidenceStorage
 
 
 @dataclass(frozen=True)
@@ -51,6 +52,20 @@ class StartTicketCommand:
     expected_version: int
 
 
+@dataclass(frozen=True)
+class CompletionPhoto:
+    content_type: str
+    content: bytes
+
+
+@dataclass(frozen=True)
+class SubmitCompletionCommand:
+    expected_version: int
+    completion_note: str
+    parts_used: tuple[str, ...]
+    photo: CompletionPhoto
+
+
 class TicketNotFoundError(LookupError):
     pass
 
@@ -63,14 +78,20 @@ class WorkerNotEligibleError(ValueError):
     pass
 
 
+class InvalidCompletionEvidenceError(ValueError):
+    pass
+
+
 class TicketService:
     def __init__(
         self,
         repository: TicketRepository,
         workers: Iterable[Worker] = (),
+        evidence_storage: EvidenceStorage | None = None,
     ) -> None:
         self._repository = repository
         self._workers = {worker.id: worker for worker in workers}
+        self._evidence_storage = evidence_storage
 
     def create_ticket(
         self,
@@ -94,6 +115,10 @@ class TicketService:
             version=1,
             assigned_worker_id=None,
             assigned_worker=None,
+            completion_note=None,
+            parts_used=(),
+            completion_photo_key=None,
+            completion_submitted_at=None,
             created_at=now,
             updated_at=now,
         )
@@ -169,6 +194,91 @@ class TicketService:
         if not was_updated:
             raise TicketVersionConflictError
         return started_ticket
+
+    def submit_completion(
+        self,
+        ticket_id: UUID,
+        command: SubmitCompletionCommand,
+        worker: WorkerContext,
+    ) -> Ticket:
+        ticket = self._repository.get_for_worker(
+            ticket_id=ticket_id,
+            property_id=worker.property_id,
+            worker_id=worker.worker_id,
+        )
+        if ticket is None:
+            raise TicketNotFoundError
+        if ticket.version != command.expected_version:
+            raise TicketVersionConflictError
+
+        note = command.completion_note.strip()
+        parts = tuple(part.strip() for part in command.parts_used if part.strip())
+        self._validate_completion(note, parts, command.photo)
+        next_status = transition(
+            current=ticket.status,
+            action=TicketAction.SUBMIT_PROOF,
+            actor=UserRole.WORKER,
+        )
+        if self._evidence_storage is None:
+            raise RuntimeError("Completion evidence storage is not configured.")
+
+        photo_key = self._evidence_storage.save(
+            ticket_id=ticket.id,
+            content_type=command.photo.content_type,
+            content=command.photo.content,
+        )
+        submitted_at = datetime.now(UTC)
+        completed_ticket = replace(
+            ticket,
+            completion_note=note,
+            parts_used=parts,
+            completion_photo_key=photo_key,
+            completion_submitted_at=submitted_at,
+            status=next_status,
+            version=ticket.version + 1,
+            updated_at=submitted_at,
+        )
+        try:
+            was_updated = self._repository.update_if_version(
+                completed_ticket,
+                expected_version=command.expected_version,
+            )
+        except Exception:
+            self._evidence_storage.delete(photo_key)
+            raise
+        if not was_updated:
+            self._evidence_storage.delete(photo_key)
+            raise TicketVersionConflictError
+        return completed_ticket
+
+    @staticmethod
+    def _validate_completion(
+        note: str,
+        parts: tuple[str, ...],
+        photo: CompletionPhoto,
+    ) -> None:
+        if not 10 <= len(note) <= 500:
+            raise InvalidCompletionEvidenceError(
+                "Completion note must contain between 10 and 500 characters."
+            )
+        if len(parts) > 10 or any(len(part) > 80 for part in parts):
+            raise InvalidCompletionEvidenceError(
+                "Use at most 10 parts with no more than 80 characters each."
+            )
+        if photo.content_type not in {
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+            "image/heic",
+            "image/heif",
+        }:
+            raise InvalidCompletionEvidenceError(
+                "Completion photo must be JPEG, PNG, WebP, HEIC, or HEIF."
+            )
+        if not photo.content or len(photo.content) > 5 * 1024 * 1024:
+            raise InvalidCompletionEvidenceError(
+                "Completion photo must be present and no larger than 5 MB."
+            )
 
     def assign_ticket(
         self,

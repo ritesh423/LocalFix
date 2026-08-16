@@ -35,6 +35,31 @@ class SampleWorkerRepository : WorkerRepository {
         }
         return started
     }
+
+    override suspend fun submitCompletion(
+        ticketId: String,
+        expectedVersion: Int,
+        completionNote: String,
+        partsUsed: List<String>,
+        photoUri: String,
+    ): WorkerJob {
+        val current = requireNotNull(mutableData.value.jobs.find { it.id == ticketId })
+        require(current.version == expectedVersion)
+        require(current.status == TicketStatus.IN_PROGRESS)
+        require(photoUri.isNotBlank())
+        val completed = current.copy(
+            status = TicketStatus.AWAITING_CONFIRMATION,
+            version = current.version + 1,
+            completionNote = completionNote,
+            partsUsed = partsUsed,
+            hasCompletionPhoto = true,
+            updatedLabel = "Updated just now",
+        )
+        mutableData.update { data ->
+            data.copy(jobs = data.jobs.map { if (it.id == ticketId) completed else it })
+        }
+        return completed
+    }
 }
 
 fun sampleWorkerData() = WorkerData(
@@ -53,6 +78,9 @@ fun sampleWorkerData() = WorkerData(
             accessWindow = AccessWindow.MORNING,
             status = TicketStatus.ASSIGNED,
             version = 2,
+            completionNote = null,
+            partsUsed = emptyList(),
+            hasCompletionPhoto = false,
             updatedLabel = "Updated 12 min ago",
         ),
         WorkerJob(
@@ -67,6 +95,9 @@ fun sampleWorkerData() = WorkerData(
             accessWindow = AccessWindow.AFTERNOON,
             status = TicketStatus.IN_PROGRESS,
             version = 3,
+            completionNote = null,
+            partsUsed = emptyList(),
+            hasCompletionPhoto = false,
             updatedLabel = "Updated 45 min ago",
         ),
     ),

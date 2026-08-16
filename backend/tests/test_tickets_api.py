@@ -13,12 +13,16 @@ from app.domain.tickets import (
 from app.main import create_app
 from app.repositories.tickets import InMemoryTicketRepository
 from app.services.tickets import CreateTicketCommand, TicketService
+from app.storage.evidence import InMemoryEvidenceStorage
 
 
 class TicketsApiTest(unittest.TestCase):
     def setUp(self) -> None:
         self.repository = InMemoryTicketRepository()
-        self.client = TestClient(create_app(self.repository))
+        self.evidence_storage = InMemoryEvidenceStorage()
+        self.client = TestClient(
+            create_app(self.repository, evidence_storage=self.evidence_storage)
+        )
 
     def test_health_reports_that_the_api_is_running(self) -> None:
         response = self.client.get("/health")
@@ -314,6 +318,93 @@ class TicketsApiTest(unittest.TestCase):
         self.assertEqual(started.status_code, 200)
         self.assertEqual(repeated.status_code, 409)
         self.assertEqual(repeated.json()["detail"]["code"], "transition_not_allowed")
+
+    def test_worker_can_submit_completion_evidence_for_an_in_progress_job(
+        self,
+    ) -> None:
+        created = self.client.post("/tickets", json=self.ticket_payload()).json()
+        self.client.post(
+            f"/manager/tickets/{created['id']}/assignment",
+            json=self.assignment_payload(1),
+        )
+        self.client.post(
+            f"/worker/tickets/{created['id']}/start",
+            json={"expected_version": 2},
+        )
+
+        response = self.client.post(
+            f"/worker/tickets/{created['id']}/completion",
+            data={
+                "expected_version": "3",
+                "completion_note": "Replaced the worn washer and tested the tap.",
+                "parts_used": ["Rubber washer", "Thread seal tape"],
+            },
+            files={"photo": ("repair.png", b"\x89PNG repair", "image/png")},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        completed = response.json()
+        self.assertEqual(completed["status"], "awaiting_confirmation")
+        self.assertEqual(completed["version"], 4)
+        self.assertEqual(
+            completed["completion_note"],
+            "Replaced the worn washer and tested the tap.",
+        )
+        self.assertEqual(
+            completed["parts_used"],
+            ["Rubber washer", "Thread seal tape"],
+        )
+        self.assertTrue(completed["has_completion_photo"])
+        self.assertEqual(len(self.evidence_storage.content_by_key), 1)
+
+    def test_completion_requires_photo_and_an_in_progress_job(self) -> None:
+        created = self.client.post("/tickets", json=self.ticket_payload()).json()
+        self.client.post(
+            f"/manager/tickets/{created['id']}/assignment",
+            json=self.assignment_payload(1),
+        )
+        completion_url = f"/worker/tickets/{created['id']}/completion"
+
+        missing_photo = self.client.post(
+            completion_url,
+            data={
+                "expected_version": "2",
+                "completion_note": "Replaced the worn washer and tested the tap.",
+            },
+        )
+        wrong_status = self.client.post(
+            completion_url,
+            data={
+                "expected_version": "2",
+                "completion_note": "Replaced the worn washer and tested the tap.",
+            },
+            files={"photo": ("repair.jpg", b"repair", "image/jpeg")},
+        )
+        self.client.post(
+            f"/worker/tickets/{created['id']}/start",
+            json={"expected_version": 2},
+        )
+        invalid_photo = self.client.post(
+            completion_url,
+            data={
+                "expected_version": "3",
+                "completion_note": "Replaced the worn washer and tested the tap.",
+            },
+            files={"photo": ("repair.txt", b"not an image", "text/plain")},
+        )
+
+        self.assertEqual(missing_photo.status_code, 400)
+        self.assertEqual(wrong_status.status_code, 409)
+        self.assertEqual(
+            wrong_status.json()["detail"]["code"],
+            "transition_not_allowed",
+        )
+        self.assertEqual(invalid_photo.status_code, 400)
+        self.assertEqual(
+            invalid_photo.json()["detail"]["code"],
+            "invalid_completion_evidence",
+        )
+        self.assertEqual(self.evidence_storage.content_by_key, {})
 
     @staticmethod
     def ticket_payload() -> dict[str, str]:

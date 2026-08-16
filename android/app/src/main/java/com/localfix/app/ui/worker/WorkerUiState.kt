@@ -35,6 +35,23 @@ data class WorkerJobDetailUiState(
     val isStarting: Boolean = false,
     val startError: String? = null,
     val hasJustStarted: Boolean = false,
+    val completionDraft: WorkerCompletionDraft = WorkerCompletionDraft(),
+    val completionErrors: WorkerCompletionErrors = WorkerCompletionErrors(),
+    val isSubmittingCompletion: Boolean = false,
+    val completionSubmissionError: String? = null,
+    val hasJustSubmittedCompletion: Boolean = false,
+)
+
+data class WorkerCompletionDraft(
+    val completionNote: String = "",
+    val partsUsed: String = "",
+    val photoUri: String? = null,
+)
+
+data class WorkerCompletionErrors(
+    val completionNote: String? = null,
+    val partsUsed: String? = null,
+    val photo: String? = null,
 )
 
 data class WorkerJobDetail(
@@ -51,4 +68,8 @@ data class WorkerJobDetail(
     val statusTone: RequestStatusTone,
     val version: Int,
     val canStart: Boolean,
+    val canSubmitCompletion: Boolean,
+    val completionNote: String?,
+    val partsUsed: List<String>,
+    val hasCompletionPhoto: Boolean,
 )

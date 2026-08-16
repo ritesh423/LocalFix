@@ -1,7 +1,5 @@
 package com.localfix.app.ui.create
 
-import android.content.Context
-import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -55,6 +53,8 @@ import coil3.compose.AsyncImage
 import com.localfix.app.data.model.AccessWindow
 import com.localfix.app.data.model.ServiceCategory
 import com.localfix.app.data.model.UrgencySuggestion
+import com.localfix.app.ui.components.persistPhotoAccess
+import com.localfix.app.ui.components.releasePhotoAccess
 import com.localfix.app.ui.theme.LocalFixRadius
 import com.localfix.app.ui.theme.LocalFixSpacing
 import com.localfix.app.ui.theme.LocalFixTheme
@@ -378,22 +378,6 @@ private fun PhotoEvidencePicker(
     error?.let { message ->
         Spacer(modifier = Modifier.height(LocalFixSpacing.small))
         FormError(message)
-    }
-}
-
-private fun persistPhotoAccess(context: Context, uri: Uri): Boolean = runCatching {
-    context.contentResolver.takePersistableUriPermission(
-        uri,
-        Intent.FLAG_GRANT_READ_URI_PERMISSION,
-    )
-}.isSuccess
-
-private fun releasePhotoAccess(context: Context, photoUri: String) {
-    runCatching {
-        context.contentResolver.releasePersistableUriPermission(
-            Uri.parse(photoUri),
-            Intent.FLAG_GRANT_READ_URI_PERMISSION,
-        )
     }
 }
 

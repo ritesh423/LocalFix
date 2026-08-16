@@ -31,7 +31,10 @@ class DefaultAppContainer(context: Context) : AppContainer {
     ).addMigrations(MIGRATION_1_2, MIGRATION_2_3)
         .build()
 
-    private val ticketApi = HttpTicketApi(context.getString(R.string.api_base_url))
+    private val ticketApi = HttpTicketApi(
+        baseUrl = context.getString(R.string.api_base_url),
+        contentResolver = context.contentResolver,
+    )
 
     override val residentRepository: ResidentRepository = ApiResidentRepository(
         ticketApi = ticketApi,

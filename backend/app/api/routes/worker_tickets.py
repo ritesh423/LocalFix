@@ -1,11 +1,18 @@
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 
 from app.api.dependencies import TicketServiceDependency, WorkerContextDependency
 from app.api.schemas import TicketResponse, TicketStartRequest
 from app.domain.ticket_workflow import TransitionNotAllowed
-from app.services.tickets import TicketNotFoundError, TicketVersionConflictError
+from app.services.tickets import (
+    CompletionPhoto,
+    InvalidCompletionEvidenceError,
+    SubmitCompletionCommand,
+    TicketNotFoundError,
+    TicketVersionConflictError,
+)
 
 router = APIRouter(prefix="/worker", tags=["worker"])
 
@@ -54,4 +61,60 @@ def start_ticket(
                 "message": str(error),
             },
         ) from error
+    return TicketResponse.from_domain(ticket)
+
+
+@router.post("/tickets/{ticket_id}/completion", response_model=TicketResponse)
+async def submit_completion(
+    ticket_id: UUID,
+    expected_version: Annotated[int, Form(ge=1)],
+    completion_note: Annotated[str, Form(min_length=10, max_length=500)],
+    photo: Annotated[UploadFile, File()],
+    service: TicketServiceDependency,
+    worker: WorkerContextDependency,
+    parts_used: Annotated[list[str] | None, Form()] = None,
+) -> TicketResponse:
+    try:
+        photo_content = await photo.read(5 * 1024 * 1024 + 1)
+        command = SubmitCompletionCommand(
+            expected_version=expected_version,
+            completion_note=completion_note,
+            parts_used=tuple(parts_used or ()),
+            photo=CompletionPhoto(
+                content_type=photo.content_type or "",
+                content=photo_content,
+            ),
+        )
+        ticket = service.submit_completion(ticket_id, command, worker)
+    except TicketNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "ticket_not_found", "message": "Ticket not found."},
+        ) from error
+    except TicketVersionConflictError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ticket_version_conflict",
+                "message": "This job changed. Refresh your queue and try again.",
+            },
+        ) from error
+    except InvalidCompletionEvidenceError as error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "invalid_completion_evidence",
+                "message": str(error),
+            },
+        ) from error
+    except TransitionNotAllowed as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": error.code,
+                "message": str(error),
+            },
+        ) from error
+    finally:
+        await photo.close()
     return TicketResponse.from_domain(ticket)
