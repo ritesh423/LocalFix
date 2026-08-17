@@ -7,6 +7,7 @@ import com.localfix.app.data.model.TicketStatus
 import com.localfix.app.data.model.UrgencySuggestion
 import com.localfix.app.data.remote.TicketApi
 import com.localfix.app.data.remote.TicketCreatePayload
+import com.localfix.app.data.remote.TicketReviewPayload
 import com.localfix.app.data.remote.TicketResponse
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -95,6 +96,59 @@ class ApiResidentRepositoryTest {
         assertEquals("Leaking kitchen tap", repository.residentData.value.requests.single().title)
     }
 
+    @Test
+    fun awaitingConfirmationMapsWorkerEvidenceAndProtectedPhotoUrl() = runTest {
+        val ticketApi = FakeTicketApi(
+            tickets = mutableListOf(
+                ticketResponse().copy(
+                    status = "awaiting_confirmation",
+                    version = 4,
+                    completionNote = "Replaced the damaged switch and tested it safely.",
+                    partsUsed = listOf("16A modular switch"),
+                    hasCompletionPhoto = true,
+                ),
+            ),
+        )
+        val repository = ApiResidentRepository(ticketApi, clock)
+
+        repository.refreshRequests()
+
+        val request = repository.residentData.value.requests.single()
+        assertEquals(TicketStatus.AWAITING_CONFIRMATION, request.status)
+        assertEquals("Replaced the damaged switch and tested it safely.", request.completionNote)
+        assertEquals(listOf("16A modular switch"), request.partsUsed)
+        assertEquals(
+            "https://api.localfix.test/tickets/${request.id}/completion-photo",
+            request.completionPhotoUrl,
+        )
+    }
+
+    @Test
+    fun reviewSendsCurrentVersionAndReplacesTheLocalRequest() = runTest {
+        val ticketApi = FakeTicketApi(
+            tickets = mutableListOf(
+                ticketResponse().copy(status = "awaiting_confirmation", version = 4),
+            ),
+        )
+        val repository = ApiResidentRepository(ticketApi, clock)
+        repository.refreshRequests()
+
+        repository.reviewRequest(
+            ticketId = "90000000-0000-0000-0000-000000000001",
+            expectedVersion = 4,
+            decision = ResidentReviewDecision.CONFIRM,
+            rating = 5,
+            feedback = "Repair looks good.",
+        )
+
+        assertEquals(4, ticketApi.lastReviewPayload?.expectedVersion)
+        assertEquals("confirm", ticketApi.lastReviewPayload?.decision)
+        assertEquals(5, ticketApi.lastReviewPayload?.rating)
+        val reviewed = repository.residentData.value.requests.single()
+        assertEquals(TicketStatus.COMPLETED, reviewed.status)
+        assertEquals(5, reviewed.residentRating)
+    }
+
     private fun ticketResponse(
         title: String = "Leaking kitchen tap",
     ) = TicketResponse(
@@ -118,6 +172,7 @@ class ApiResidentRepositoryTest {
         var listFailure: Throwable? = null,
     ) : TicketApi {
         var lastCreatePayload: TicketCreatePayload? = null
+        var lastReviewPayload: TicketReviewPayload? = null
 
         override suspend fun createTicket(request: TicketCreatePayload): TicketResponse {
             lastCreatePayload = request
@@ -128,5 +183,26 @@ class ApiResidentRepositoryTest {
             listFailure?.let { throw it }
             return tickets
         }
+
+        override suspend fun reviewTicket(
+            ticketId: String,
+            request: TicketReviewPayload,
+        ): TicketResponse {
+            lastReviewPayload = request
+            val current = tickets.single { it.id == ticketId }
+            val reviewed = current.copy(
+                status = if (request.decision == "confirm") "completed" else "assigned",
+                version = current.version + 1,
+                residentRating = request.rating,
+                residentFeedback = request.feedback,
+                residentReviewedAt = "2026-08-12T10:05:00Z",
+                updatedAt = "2026-08-12T10:05:00Z",
+            )
+            tickets.replaceAll { if (it.id == ticketId) reviewed else it }
+            return reviewed
+        }
+
+        override fun completionPhotoUrl(ticketId: String): String =
+            "https://api.localfix.test/tickets/$ticketId/completion-photo"
     }
 }

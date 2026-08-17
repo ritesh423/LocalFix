@@ -113,6 +113,7 @@ fun ResidentNavigation(
                         navController.navigate(CREATE_REQUEST_ROUTE)
                     },
                     onRequestClick = { requestId ->
+                        residentViewModel.openRequest(requestId)
                         navController.navigate(requestDetailRoute(requestId))
                     },
                     onCategoryClick = { category ->
@@ -130,6 +131,7 @@ fun ResidentNavigation(
                         navController.navigate(CREATE_REQUEST_ROUTE)
                     },
                     onRequestClick = { requestId ->
+                        residentViewModel.openRequest(requestId)
                         navController.navigate(requestDetailRoute(requestId))
                     },
                     onRetryRequests = residentViewModel::refreshRequests,
@@ -167,9 +169,16 @@ fun ResidentNavigation(
                 ),
             ) { backStackEntry ->
                 val requestId = backStackEntry.arguments?.getString(REQUEST_ID_ARGUMENT)
+                LaunchedEffect(requestId) {
+                    if (requestId != null) residentViewModel.openRequest(requestId)
+                }
                 ResidentRequestDetailScreen(
                     uiState = requestId?.let(uiState.requestDetails::get),
                     onBack = { navController.popBackStack() },
+                    onReviewDecisionSelected = residentViewModel::selectReviewDecision,
+                    onRatingSelected = residentViewModel::selectReviewRating,
+                    onFeedbackChanged = residentViewModel::updateReviewFeedback,
+                    onSubmitReview = residentViewModel::submitReview,
                 )
             }
         }

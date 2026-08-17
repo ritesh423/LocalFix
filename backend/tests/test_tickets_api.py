@@ -406,6 +406,89 @@ class TicketsApiTest(unittest.TestCase):
         )
         self.assertEqual(self.evidence_storage.content_by_key, {})
 
+    def test_resident_can_view_completion_photo_and_confirm_with_a_rating(
+        self,
+    ) -> None:
+        completed = self.create_completed_ticket()
+
+        photo = self.client.get(f"/tickets/{completed['id']}/completion-photo")
+        review = self.client.post(
+            f"/tickets/{completed['id']}/review",
+            json={
+                "expected_version": completed["version"],
+                "decision": "confirm",
+                "rating": 5,
+                "feedback": "The repair is working properly now.",
+            },
+        )
+
+        self.assertEqual(photo.status_code, 200)
+        self.assertEqual(photo.headers["content-type"], "image/png")
+        self.assertEqual(photo.content, b"\x89PNG repair")
+        self.assertEqual(review.status_code, 200)
+        reviewed = review.json()
+        self.assertEqual(reviewed["status"], "completed")
+        self.assertEqual(reviewed["version"], 5)
+        self.assertEqual(reviewed["resident_rating"], 5)
+        self.assertEqual(
+            reviewed["resident_feedback"],
+            "The repair is working properly now.",
+        )
+
+    def test_resident_can_request_rework_with_a_reason(self) -> None:
+        completed = self.create_completed_ticket()
+
+        response = self.client.post(
+            f"/tickets/{completed['id']}/review",
+            json={
+                "expected_version": completed["version"],
+                "decision": "request_rework",
+                "feedback": "The pipe is still dripping near the lower joint.",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        reviewed = response.json()
+        self.assertEqual(reviewed["status"], "assigned")
+        self.assertIsNone(reviewed["resident_rating"])
+        self.assertEqual(
+            reviewed["resident_feedback"],
+            "The pipe is still dripping near the lower joint.",
+        )
+
+    def test_resident_review_validates_decision_fields_and_current_version(self) -> None:
+        completed = self.create_completed_ticket()
+        review_url = f"/tickets/{completed['id']}/review"
+
+        missing_rating = self.client.post(
+            review_url,
+            json={
+                "expected_version": completed["version"],
+                "decision": "confirm",
+            },
+        )
+        short_rework_reason = self.client.post(
+            review_url,
+            json={
+                "expected_version": completed["version"],
+                "decision": "request_rework",
+                "feedback": "Still bad",
+            },
+        )
+        stale = self.client.post(
+            review_url,
+            json={
+                "expected_version": completed["version"] - 1,
+                "decision": "confirm",
+                "rating": 4,
+            },
+        )
+
+        self.assertEqual(missing_rating.status_code, 400)
+        self.assertEqual(short_rework_reason.status_code, 400)
+        self.assertEqual(stale.status_code, 409)
+        self.assertEqual(stale.json()["detail"]["code"], "ticket_version_conflict")
+
     @staticmethod
     def ticket_payload() -> dict[str, str]:
         return {
@@ -424,6 +507,26 @@ class TicketsApiTest(unittest.TestCase):
             "priority": "urgent",
             "worker_id": "40000000-0000-0000-0000-000000000001",
         }
+
+    def create_completed_ticket(self) -> dict[str, object]:
+        created = self.client.post("/tickets", json=self.ticket_payload()).json()
+        self.client.post(
+            f"/manager/tickets/{created['id']}/assignment",
+            json=self.assignment_payload(1),
+        )
+        self.client.post(
+            f"/worker/tickets/{created['id']}/start",
+            json={"expected_version": 2},
+        )
+        return self.client.post(
+            f"/worker/tickets/{created['id']}/completion",
+            data={
+                "expected_version": "3",
+                "completion_note": "Replaced the worn washer and tested the tap.",
+                "parts_used": ["Rubber washer", "Thread seal tape"],
+            },
+            files={"photo": ("repair.png", b"\x89PNG repair", "image/png")},
+        ).json()
 
 
 if __name__ == "__main__":

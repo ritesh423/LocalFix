@@ -32,6 +32,11 @@ class AccessWindow(StrEnum):
     EVENING = "evening"
 
 
+class ResidentReviewDecision(StrEnum):
+    CONFIRM = "confirm"
+    REQUEST_REWORK = "request_rework"
+
+
 @dataclass(frozen=True)
 class ResidentContext:
     user_id: UUID
@@ -81,5 +86,8 @@ class Ticket:
     parts_used: tuple[str, ...]
     completion_photo_key: str | None
     completion_submitted_at: datetime | None
+    resident_rating: int | None
+    resident_feedback: str | None
+    resident_reviewed_at: datetime | None
     created_at: datetime
     updated_at: datetime

@@ -13,6 +13,7 @@ from app.domain.tickets import (
     AccessWindow,
     ManagerContext,
     ResidentContext,
+    ResidentReviewDecision,
     ServiceCategory,
     Ticket,
     TicketPriority,
@@ -21,7 +22,7 @@ from app.domain.tickets import (
     WorkerContext,
 )
 from app.repositories.tickets import TicketRepository
-from app.storage.evidence import EvidenceStorage
+from app.storage.evidence import EvidenceStorage, StoredEvidence
 
 
 @dataclass(frozen=True)
@@ -66,6 +67,14 @@ class SubmitCompletionCommand:
     photo: CompletionPhoto
 
 
+@dataclass(frozen=True)
+class ReviewTicketCommand:
+    expected_version: int
+    decision: ResidentReviewDecision
+    rating: int | None
+    feedback: str | None
+
+
 class TicketNotFoundError(LookupError):
     pass
 
@@ -79,6 +88,10 @@ class WorkerNotEligibleError(ValueError):
 
 
 class InvalidCompletionEvidenceError(ValueError):
+    pass
+
+
+class InvalidResidentReviewError(ValueError):
     pass
 
 
@@ -119,6 +132,9 @@ class TicketService:
             parts_used=(),
             completion_photo_key=None,
             completion_submitted_at=None,
+            resident_rating=None,
+            resident_feedback=None,
+            resident_reviewed_at=None,
             created_at=now,
             updated_at=now,
         )
@@ -249,7 +265,83 @@ class TicketService:
         if not was_updated:
             self._evidence_storage.delete(photo_key)
             raise TicketVersionConflictError
+        if (
+            ticket.completion_photo_key is not None
+            and ticket.completion_photo_key != photo_key
+        ):
+            self._evidence_storage.delete(ticket.completion_photo_key)
         return completed_ticket
+
+    def get_completion_photo(
+        self,
+        ticket_id: UUID,
+        resident: ResidentContext,
+    ) -> StoredEvidence | None:
+        ticket = self._repository.get_for_resident(
+            ticket_id=ticket_id,
+            property_id=resident.property_id,
+            resident_id=resident.user_id,
+        )
+        if ticket is None or ticket.completion_photo_key is None:
+            return None
+        if self._evidence_storage is None:
+            raise RuntimeError("Completion evidence storage is not configured.")
+        return self._evidence_storage.read(ticket.completion_photo_key)
+
+    def review_ticket(
+        self,
+        ticket_id: UUID,
+        command: ReviewTicketCommand,
+        resident: ResidentContext,
+    ) -> Ticket:
+        ticket = self._repository.get_for_resident(
+            ticket_id=ticket_id,
+            property_id=resident.property_id,
+            resident_id=resident.user_id,
+        )
+        if ticket is None:
+            raise TicketNotFoundError
+        if ticket.version != command.expected_version:
+            raise TicketVersionConflictError
+
+        feedback = command.feedback.strip() if command.feedback else None
+        if command.decision is ResidentReviewDecision.CONFIRM:
+            if command.rating is None or not 1 <= command.rating <= 5:
+                raise InvalidResidentReviewError(
+                    "A rating from 1 to 5 is required to confirm the repair."
+                )
+            action = TicketAction.CONFIRM
+        else:
+            if feedback is None or len(feedback) < 10:
+                raise InvalidResidentReviewError(
+                    "Describe what still needs attention in at least 10 characters."
+                )
+            action = TicketAction.REQUEST_REWORK
+
+        next_status = transition(
+            current=ticket.status,
+            action=action,
+            actor=UserRole.RESIDENT,
+        )
+        reviewed_at = datetime.now(UTC)
+        reviewed_ticket = replace(
+            ticket,
+            status=next_status,
+            version=ticket.version + 1,
+            resident_rating=command.rating
+            if command.decision is ResidentReviewDecision.CONFIRM
+            else None,
+            resident_feedback=feedback,
+            resident_reviewed_at=reviewed_at,
+            updated_at=reviewed_at,
+        )
+        was_updated = self._repository.update_if_version(
+            reviewed_ticket,
+            expected_version=command.expected_version,
+        )
+        if not was_updated:
+            raise TicketVersionConflictError
+        return reviewed_ticket
 
     @staticmethod
     def _validate_completion(

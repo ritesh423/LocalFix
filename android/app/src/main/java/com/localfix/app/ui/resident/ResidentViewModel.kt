@@ -15,6 +15,7 @@ import com.localfix.app.data.model.ServiceCategory
 import com.localfix.app.data.model.TicketStatus
 import com.localfix.app.data.model.UrgencySuggestion
 import com.localfix.app.data.resident.ResidentRepository
+import com.localfix.app.data.resident.ResidentReviewDecision
 import com.localfix.app.data.resident.RequestSyncState
 import com.localfix.app.ui.home.MaintenanceRequestSummary
 import com.localfix.app.ui.create.CreateRequestUiState
@@ -26,6 +27,7 @@ import com.localfix.app.ui.home.ServiceCategoryType
 import com.localfix.app.ui.home.ServiceCategory as ServiceCategoryItem
 import com.localfix.app.ui.profile.ResidentProfileUiState
 import com.localfix.app.ui.requestdetail.ResidentRequestDetailUiState
+import com.localfix.app.ui.requestdetail.ResidentReviewUiState
 import com.localfix.app.ui.requests.RequestFilter
 import com.localfix.app.ui.requests.RequestStatusTone
 import com.localfix.app.ui.requests.ResidentRequestItem
@@ -45,6 +47,7 @@ class ResidentViewModel(
 ) : ViewModel() {
     private val selectedFilter = MutableStateFlow(RequestFilter.ALL)
     private val mutableCreateRequestState = MutableStateFlow(CreateRequestUiState())
+    private val reviewState = MutableStateFlow(ResidentReviewState())
     private var hasEditedDraft = false
 
     val createRequestState = mutableCreateRequestState.asStateFlow()
@@ -65,6 +68,7 @@ class ResidentViewModel(
         repository.residentData,
         repository.requestSyncState,
         selectedFilter,
+        reviewState,
         ::createResidentUiState,
     ).stateIn(
         scope = viewModelScope,
@@ -73,6 +77,7 @@ class ResidentViewModel(
             repository.residentData.value,
             repository.requestSyncState.value,
             selectedFilter.value,
+            reviewState.value,
         ),
     )
 
@@ -83,6 +88,104 @@ class ResidentViewModel(
     fun refreshRequests() {
         viewModelScope.launch {
             repository.refreshRequests()
+        }
+    }
+
+    fun openRequest(ticketId: String) {
+        if (reviewState.value.ticketId != ticketId) {
+            reviewState.value = ResidentReviewState(ticketId = ticketId)
+        }
+    }
+
+    fun selectReviewDecision(decision: ResidentReviewDecision) {
+        reviewState.update { current ->
+            current.copy(
+                selectedDecision = decision,
+                decisionError = null,
+                ratingError = null,
+                feedbackError = null,
+                submissionError = null,
+            )
+        }
+    }
+
+    fun selectReviewRating(rating: Int) {
+        reviewState.update { current ->
+            current.copy(rating = rating, ratingError = null, submissionError = null)
+        }
+    }
+
+    fun updateReviewFeedback(feedback: String) {
+        reviewState.update { current ->
+            current.copy(
+                feedback = feedback.take(500),
+                feedbackError = null,
+                submissionError = null,
+            )
+        }
+    }
+
+    fun submitReview() {
+        val current = reviewState.value
+        val ticket = repository.residentData.value.requests.find {
+            it.id == current.ticketId
+        } ?: return
+        if (ticket.status != TicketStatus.AWAITING_CONFIRMATION || current.isSubmitting) return
+
+        val decisionError = if (current.selectedDecision == null) {
+            "Choose whether the repair is complete"
+        } else {
+            null
+        }
+        val ratingError = if (
+            current.selectedDecision == ResidentReviewDecision.CONFIRM && current.rating == null
+        ) {
+            "Choose a rating from 1 to 5"
+        } else {
+            null
+        }
+        val feedbackError = if (
+            current.selectedDecision == ResidentReviewDecision.REQUEST_REWORK &&
+            current.feedback.trim().length < 10
+        ) {
+            "Describe what still needs attention in at least 10 characters"
+        } else {
+            null
+        }
+        if (decisionError != null || ratingError != null || feedbackError != null) {
+            reviewState.update {
+                it.copy(
+                    decisionError = decisionError,
+                    ratingError = ratingError,
+                    feedbackError = feedbackError,
+                )
+            }
+            return
+        }
+
+        reviewState.update { it.copy(isSubmitting = true, submissionError = null) }
+        viewModelScope.launch {
+            runCatching {
+                repository.reviewRequest(
+                    ticketId = ticket.id,
+                    expectedVersion = ticket.version,
+                    decision = requireNotNull(current.selectedDecision),
+                    rating = current.rating,
+                    feedback = current.feedback.trim().ifBlank { null },
+                )
+            }.onSuccess {
+                reviewState.update {
+                    it.copy(isSubmitting = false, hasJustSubmitted = true)
+                }
+            }.onFailure {
+                reviewState.update {
+                    it.copy(
+                        isSubmitting = false,
+                        submissionError =
+                            "Couldn't send your review. Refresh the request and try again.",
+                    )
+                }
+            }
         }
     }
 
@@ -282,6 +385,7 @@ private fun createResidentUiState(
     data: ResidentData,
     requestSyncState: RequestSyncState,
     selectedFilter: RequestFilter,
+    reviewState: ResidentReviewState,
 ): ResidentUiState {
     val visibleRequests = data.requests.filter { request ->
         when (selectedFilter) {
@@ -354,7 +458,9 @@ private fun createResidentUiState(
             email = data.account.email,
         ),
         requestDetails = data.requests.associate { request ->
-            request.id to request.toDetailUiState()
+            request.id to request.toDetailUiState(
+                reviewState.takeIf { it.ticketId == request.id },
+            )
         },
     )
 }
@@ -376,8 +482,11 @@ private fun RequestSyncState.toLoadUiState(
     }
 }
 
-private fun MaintenanceRequest.toDetailUiState(): ResidentRequestDetailUiState =
+private fun MaintenanceRequest.toDetailUiState(
+    reviewState: ResidentReviewState?,
+): ResidentRequestDetailUiState =
     ResidentRequestDetailUiState(
+        requestId = id,
         id = reference,
         title = title,
         description = description,
@@ -389,7 +498,39 @@ private fun MaintenanceRequest.toDetailUiState(): ResidentRequestDetailUiState =
         assignedWorker = assignedWorker,
         updatedLabel = updatedLabel,
         photoUri = photoUri,
+        completionNote = completionNote,
+        partsUsed = partsUsed,
+        completionPhotoUrl = completionPhotoUrl,
+        residentRating = residentRating,
+        residentFeedback = residentFeedback,
+        canReview = status == TicketStatus.AWAITING_CONFIRMATION,
+        review = reviewState?.toUiState() ?: ResidentReviewUiState(),
     )
+
+private data class ResidentReviewState(
+    val ticketId: String? = null,
+    val selectedDecision: ResidentReviewDecision? = null,
+    val rating: Int? = null,
+    val feedback: String = "",
+    val decisionError: String? = null,
+    val ratingError: String? = null,
+    val feedbackError: String? = null,
+    val isSubmitting: Boolean = false,
+    val submissionError: String? = null,
+    val hasJustSubmitted: Boolean = false,
+)
+
+private fun ResidentReviewState.toUiState() = ResidentReviewUiState(
+    selectedDecision = selectedDecision,
+    rating = rating,
+    feedback = feedback,
+    decisionError = decisionError,
+    ratingError = ratingError,
+    feedbackError = feedbackError,
+    isSubmitting = isSubmitting,
+    submissionError = submissionError,
+    hasJustSubmitted = hasJustSubmitted,
+)
 
 private val MaintenanceRequest.reference: String
     get() = if (id.startsWith("LF-")) id else "LF-${id.take(8).uppercase()}"

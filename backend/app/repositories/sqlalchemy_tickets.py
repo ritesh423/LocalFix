@@ -154,6 +154,9 @@ class SqlAlchemyTicketRepository:
                 parts_used=list(ticket.parts_used),
                 completion_photo_key=ticket.completion_photo_key,
                 completion_submitted_at=ticket.completion_submitted_at,
+                resident_rating=ticket.resident_rating,
+                resident_feedback=ticket.resident_feedback,
+                resident_reviewed_at=ticket.resident_reviewed_at,
                 updated_at=ticket.updated_at,
             )
         )
@@ -198,6 +201,9 @@ def _record_from_domain(ticket: Ticket) -> TicketRecord:
         parts_used=list(ticket.parts_used),
         completion_photo_key=ticket.completion_photo_key,
         completion_submitted_at=ticket.completion_submitted_at,
+        resident_rating=ticket.resident_rating,
+        resident_feedback=ticket.resident_feedback,
+        resident_reviewed_at=ticket.resident_reviewed_at,
         created_at=ticket.created_at,
         updated_at=ticket.updated_at,
     )
@@ -227,6 +233,11 @@ def _record_to_domain(record: TicketRecord) -> Ticket:
         completion_photo_key=record.completion_photo_key,
         completion_submitted_at=_ensure_utc(record.completion_submitted_at)
         if record.completion_submitted_at is not None
+        else None,
+        resident_rating=record.resident_rating,
+        resident_feedback=record.resident_feedback,
+        resident_reviewed_at=_ensure_utc(record.resident_reviewed_at)
+        if record.resident_reviewed_at is not None
         else None,
         created_at=_ensure_utc(record.created_at),
         updated_at=_ensure_utc(record.updated_at),

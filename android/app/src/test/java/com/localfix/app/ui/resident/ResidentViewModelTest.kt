@@ -7,6 +7,7 @@ import com.localfix.app.data.model.ResidentData
 import com.localfix.app.data.model.SavedRequestDraft
 import com.localfix.app.data.model.UrgencySuggestion
 import com.localfix.app.data.resident.ResidentRepository
+import com.localfix.app.data.resident.ResidentReviewDecision
 import com.localfix.app.data.resident.RequestSyncState
 import com.localfix.app.data.resident.SampleResidentRepository
 import com.localfix.app.data.model.ServiceCategory
@@ -247,6 +248,57 @@ class ResidentViewModelTest {
         assertEquals(3, staleViewModel.uiState.value.requests.requests.size)
     }
 
+    @Test
+    fun confirmingARepairRequiresARatingAndCompletesTheRequest() = runTest {
+        val repository = SampleResidentRepository()
+        val viewModel = ResidentViewModel(repository, InMemoryRequestDraftRepository())
+        viewModel.openRequest("LF-1018")
+        viewModel.selectReviewDecision(ResidentReviewDecision.CONFIRM)
+
+        viewModel.submitReview()
+        advanceUntilIdle()
+
+        assertEquals(
+            "Choose a rating from 1 to 5",
+            viewModel.uiState.value.requestDetails["LF-1018"]?.review?.ratingError,
+        )
+
+        viewModel.selectReviewRating(5)
+        viewModel.updateReviewFeedback("The switch works safely now.")
+        viewModel.submitReview()
+        advanceUntilIdle()
+
+        val request = repository.residentData.value.requests.single { it.id == "LF-1018" }
+        assertEquals(TicketStatus.COMPLETED, request.status)
+        assertEquals(5, request.residentRating)
+        assertEquals(false, viewModel.uiState.value.requestDetails["LF-1018"]?.canReview)
+    }
+
+    @Test
+    fun requestingMoreWorkRequiresAUsefulReasonAndReturnsTicketToWorker() = runTest {
+        val repository = SampleResidentRepository()
+        val viewModel = ResidentViewModel(repository, InMemoryRequestDraftRepository())
+        viewModel.openRequest("LF-1018")
+        viewModel.selectReviewDecision(ResidentReviewDecision.REQUEST_REWORK)
+        viewModel.updateReviewFeedback("Still bad")
+
+        viewModel.submitReview()
+        advanceUntilIdle()
+
+        assertEquals(
+            "Describe what still needs attention in at least 10 characters",
+            viewModel.uiState.value.requestDetails["LF-1018"]?.review?.feedbackError,
+        )
+
+        viewModel.updateReviewFeedback("The switch still sparks when pressed.")
+        viewModel.submitReview()
+        advanceUntilIdle()
+
+        val request = repository.residentData.value.requests.single { it.id == "LF-1018" }
+        assertEquals(TicketStatus.ASSIGNED, request.status)
+        assertEquals("The switch still sparks when pressed.", request.residentFeedback)
+    }
+
     private fun createViewModel(): ResidentViewModel = ResidentViewModel(
         SampleResidentRepository(),
         InMemoryRequestDraftRepository(),
@@ -261,6 +313,14 @@ class ResidentViewModelTest {
 
         override suspend fun createRequest(request: NewMaintenanceRequest): String =
             error("Not needed in this test")
+
+        override suspend fun reviewRequest(
+            ticketId: String,
+            expectedVersion: Int,
+            decision: ResidentReviewDecision,
+            rating: Int?,
+            feedback: String?,
+        ) = error("Not needed in this test")
 
         override suspend fun refreshRequests() = Unit
     }

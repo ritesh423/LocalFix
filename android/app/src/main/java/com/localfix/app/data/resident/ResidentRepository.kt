@@ -11,6 +11,19 @@ interface ResidentRepository {
     suspend fun createRequest(request: NewMaintenanceRequest): String
 
     suspend fun refreshRequests()
+
+    suspend fun reviewRequest(
+        ticketId: String,
+        expectedVersion: Int,
+        decision: ResidentReviewDecision,
+        rating: Int?,
+        feedback: String?,
+    )
+}
+
+enum class ResidentReviewDecision {
+    CONFIRM,
+    REQUEST_REWORK,
 }
 
 sealed interface RequestSyncState {

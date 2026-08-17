@@ -45,6 +45,10 @@ class SampleResidentRepository : ResidentRepository {
                     accessWindow = AccessWindow.EVENING,
                     assignedWorker = "Maya · Electrical",
                     updatedLabel = "Completed yesterday",
+                    version = 4,
+                    completionNote = "Replaced the damaged switch and tested it safely.",
+                    partsUsed = listOf("16A modular switch"),
+                    completionPhotoUrl = "https://example.invalid/completion-photo.jpg",
                 ),
                 MaintenanceRequest(
                     id = "LF-0994",
@@ -86,4 +90,30 @@ class SampleResidentRepository : ResidentRepository {
     }
 
     override suspend fun refreshRequests() = Unit
+
+    override suspend fun reviewRequest(
+        ticketId: String,
+        expectedVersion: Int,
+        decision: ResidentReviewDecision,
+        rating: Int?,
+        feedback: String?,
+    ) {
+        val current = requireNotNull(data.value.requests.find { it.id == ticketId })
+        require(current.version == expectedVersion)
+        require(current.status == TicketStatus.AWAITING_CONFIRMATION)
+        val reviewed = current.copy(
+            status = if (decision == ResidentReviewDecision.CONFIRM) {
+                TicketStatus.COMPLETED
+            } else {
+                TicketStatus.ASSIGNED
+            },
+            version = current.version + 1,
+            residentRating = if (decision == ResidentReviewDecision.CONFIRM) rating else null,
+            residentFeedback = feedback,
+            updatedLabel = "Updated just now",
+        )
+        data.value = data.value.copy(
+            requests = data.value.requests.map { if (it.id == ticketId) reviewed else it },
+        )
+    }
 }

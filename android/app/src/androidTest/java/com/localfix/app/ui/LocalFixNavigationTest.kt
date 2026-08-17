@@ -71,6 +71,27 @@ class LocalFixNavigationTest {
     }
 
     @Test
+    fun residentCanReviewWorkerEvidenceAndConfirmTheRepair() {
+        composeRule.setContent {
+            LocalFixApp(testAppContainer())
+        }
+
+        composeRule.onNodeWithText("Resident").performClick()
+        composeRule.onNodeWithTag("resident-nav-resident/requests").performClick()
+        composeRule.onNodeWithText("Bedroom switch sparking").performClick()
+        composeRule.onNodeWithText("Replaced the damaged switch and tested it safely.")
+            .assertIsDisplayed()
+
+        composeRule.onNodeWithTag("request-detail").performScrollToIndex(5)
+        composeRule.onNodeWithTag("resident-review-confirm").performClick()
+        composeRule.onNodeWithTag("resident-rating-5").performClick()
+        composeRule.onNodeWithTag("resident-submit-review").performClick()
+
+        composeRule.onNodeWithText("Your review").assertIsDisplayed()
+        composeRule.onNodeWithText("5 out of 5").assertIsDisplayed()
+    }
+
+    @Test
     fun managerCanAssignAnOpenRequestAndReturnToQueue() {
         composeRule.setContent {
             LocalFixApp(testAppContainer())

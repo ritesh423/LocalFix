@@ -17,6 +17,7 @@ from app.database.session import create_database_engine, create_session_factory
 from app.domain.tickets import (
     AccessWindow,
     ResidentContext,
+    ResidentReviewDecision,
     ServiceCategory,
     TicketPriority,
     UrgencySuggestion,
@@ -26,6 +27,7 @@ from app.services.tickets import (
     AssignTicketCommand,
     CompletionPhoto,
     CreateTicketCommand,
+    ReviewTicketCommand,
     StartTicketCommand,
     SubmitCompletionCommand,
     TicketService,
@@ -164,7 +166,9 @@ class SqlAlchemyTicketRepositoryTest(unittest.TestCase):
         self.assertEqual(restored.version, 3)
         self.assertEqual([ticket.id for ticket in worker_queue], [started.id])
 
-    def test_worker_completion_evidence_survives_engine_recreation(self) -> None:
+    def test_completion_evidence_and_resident_review_survive_engine_recreation(
+        self,
+    ) -> None:
         evidence_storage = InMemoryEvidenceStorage()
         first_engine = create_database_engine(self.database_url)
         first_service = TicketService(
@@ -200,20 +204,35 @@ class SqlAlchemyTicketRepositoryTest(unittest.TestCase):
             ),
             DEMO_WORKER_CONTEXT,
         )
+        reviewed = first_service.review_ticket(
+            completed.id,
+            ReviewTicketCommand(
+                expected_version=completed.version,
+                decision=ResidentReviewDecision.CONFIRM,
+                rating=5,
+                feedback="The repair is working properly now.",
+            ),
+            DEMO_RESIDENT_CONTEXT,
+        )
         first_engine.dispose()
 
         second_engine = create_database_engine(self.database_url)
         second_service = TicketService(
             SqlAlchemyTicketRepository(create_session_factory(second_engine))
         )
-        restored = second_service.get_ticket(completed.id, DEMO_RESIDENT_CONTEXT)
+        restored = second_service.get_ticket(reviewed.id, DEMO_RESIDENT_CONTEXT)
         second_engine.dispose()
 
         self.assertIsNotNone(restored)
-        self.assertEqual(restored.status.value, "awaiting_confirmation")
+        self.assertEqual(restored.status.value, "completed")
         self.assertEqual(restored.completion_note, completed.completion_note)
         self.assertEqual(restored.parts_used, ("Rubber washer",))
         self.assertIsNotNone(restored.completion_photo_key)
+        self.assertEqual(restored.resident_rating, 5)
+        self.assertEqual(
+            restored.resident_feedback,
+            "The repair is working properly now.",
+        )
         self.assertEqual(len(evidence_storage.content_by_key), 1)
 
     def test_manager_assignment_migration_preserves_existing_tickets(self) -> None:
@@ -280,6 +299,9 @@ class SqlAlchemyTicketRepositoryTest(unittest.TestCase):
         self.assertIn("completion_note", column_names)
         self.assertIn("parts_used", column_names)
         self.assertIn("completion_photo_key", column_names)
+        self.assertIn("resident_rating", column_names)
+        self.assertIn("resident_feedback", column_names)
+        self.assertIn("resident_reviewed_at", column_names)
         self.assertIn("ix_tickets_worker_status_updated", index_names)
         self.assertEqual(restored_title, "Existing ticket")
 

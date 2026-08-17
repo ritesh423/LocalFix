@@ -10,6 +10,7 @@ import com.localfix.app.data.model.TicketStatus
 import com.localfix.app.data.model.UrgencySuggestion
 import com.localfix.app.data.remote.TicketApi
 import com.localfix.app.data.remote.TicketCreatePayload
+import com.localfix.app.data.remote.TicketReviewPayload
 import com.localfix.app.data.remote.TicketResponse
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -41,7 +42,18 @@ class ApiResidentRepository(
         runCatching { ticketApi.listTickets() }
             .onSuccess { tickets ->
                 mutableResidentData.update { data ->
-                    data.copy(requests = tickets.map { it.toMaintenanceRequest(clock) })
+                    data.copy(
+                        requests = tickets.map {
+                            it.toMaintenanceRequest(
+                                clock = clock,
+                                completionPhotoUrl = if (it.hasCompletionPhoto) {
+                                    ticketApi.completionPhotoUrl(it.id)
+                                } else {
+                                    null
+                                },
+                            )
+                        },
+                    )
                 }
                 hasLoadedRequests = true
                 mutableRequestSyncState.value = RequestSyncState.Ready
@@ -58,7 +70,7 @@ class ApiResidentRepository(
         return runCatching {
             ticketApi.createTicket(request.toPayload())
         }.onSuccess { createdTicket ->
-            val requestModel = createdTicket.toMaintenanceRequest(clock)
+            val requestModel = createdTicket.toMaintenanceRequest(clock, null)
             mutableResidentData.update { data ->
                 data.copy(
                     requests = listOf(requestModel) + data.requests.filterNot { existing ->
@@ -67,6 +79,39 @@ class ApiResidentRepository(
                 )
             }
         }.getOrThrow().id
+    }
+
+    override suspend fun reviewRequest(
+        ticketId: String,
+        expectedVersion: Int,
+        decision: ResidentReviewDecision,
+        rating: Int?,
+        feedback: String?,
+    ) {
+        val reviewed = ticketApi.reviewTicket(
+            ticketId = ticketId,
+            request = TicketReviewPayload(
+                expectedVersion = expectedVersion,
+                decision = decision.name.lowercase(),
+                rating = rating,
+                feedback = feedback,
+            ),
+        )
+        val requestModel = reviewed.toMaintenanceRequest(
+            clock = clock,
+            completionPhotoUrl = if (reviewed.hasCompletionPhoto) {
+                ticketApi.completionPhotoUrl(reviewed.id)
+            } else {
+                null
+            },
+        )
+        mutableResidentData.update { data ->
+            data.copy(
+                requests = data.requests.map { existing ->
+                    if (existing.id == requestModel.id) requestModel else existing
+                },
+            )
+        }
     }
 
     private companion object {
@@ -96,7 +141,10 @@ private fun NewMaintenanceRequest.toPayload(): TicketCreatePayload = TicketCreat
     accessWindow = accessWindow.name.lowercase(),
 )
 
-private fun TicketResponse.toMaintenanceRequest(clock: Clock): MaintenanceRequest =
+private fun TicketResponse.toMaintenanceRequest(
+    clock: Clock,
+    completionPhotoUrl: String?,
+): MaintenanceRequest =
     MaintenanceRequest(
         id = id,
         title = title,
@@ -107,6 +155,12 @@ private fun TicketResponse.toMaintenanceRequest(clock: Clock): MaintenanceReques
         accessWindow = AccessWindow.valueOf(accessWindow.uppercase()),
         assignedWorker = assignedWorker ?: "Awaiting assignment",
         updatedLabel = updatedAt.toUpdatedLabel(clock),
+        version = version,
+        completionNote = completionNote,
+        partsUsed = partsUsed,
+        completionPhotoUrl = completionPhotoUrl,
+        residentRating = residentRating,
+        residentFeedback = residentFeedback,
     )
 
 private fun String.toUpdatedLabel(clock: Clock): String {

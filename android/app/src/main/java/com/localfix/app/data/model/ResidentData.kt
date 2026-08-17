@@ -25,6 +25,12 @@ data class MaintenanceRequest(
     val assignedWorker: String,
     val updatedLabel: String,
     val photoUri: String? = null,
+    val version: Int = 1,
+    val completionNote: String? = null,
+    val partsUsed: List<String> = emptyList(),
+    val completionPhotoUrl: String? = null,
+    val residentRating: Int? = null,
+    val residentFeedback: String? = null,
 )
 
 data class NewMaintenanceRequest(

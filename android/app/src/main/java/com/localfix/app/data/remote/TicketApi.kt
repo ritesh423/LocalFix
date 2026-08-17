@@ -16,6 +16,13 @@ interface TicketApi {
     suspend fun createTicket(request: TicketCreatePayload): TicketResponse
 
     suspend fun listTickets(): List<TicketResponse>
+
+    suspend fun reviewTicket(
+        ticketId: String,
+        request: TicketReviewPayload,
+    ): TicketResponse
+
+    fun completionPhotoUrl(ticketId: String): String? = null
 }
 
 interface ManagerTicketApi {
@@ -51,6 +58,14 @@ data class TicketCreatePayload(
     val category: String,
     @SerialName("urgency_suggestion") val urgencySuggestion: String,
     @SerialName("access_window") val accessWindow: String,
+)
+
+@Serializable
+data class TicketReviewPayload(
+    @SerialName("expected_version") val expectedVersion: Int,
+    val decision: String,
+    val rating: Int? = null,
+    val feedback: String? = null,
 )
 
 @Serializable
@@ -100,6 +115,9 @@ data class TicketResponse(
     @SerialName("parts_used") val partsUsed: List<String> = emptyList(),
     @SerialName("has_completion_photo") val hasCompletionPhoto: Boolean = false,
     @SerialName("completion_submitted_at") val completionSubmittedAt: String? = null,
+    @SerialName("resident_rating") val residentRating: Int? = null,
+    @SerialName("resident_feedback") val residentFeedback: String? = null,
+    @SerialName("resident_reviewed_at") val residentReviewedAt: String? = null,
     @SerialName("created_at") val createdAt: String,
     @SerialName("updated_at") val updatedAt: String,
 )
@@ -124,6 +142,21 @@ class HttpTicketApi(
         val responseBody = execute(method = "GET", path = "/tickets")
         return json.decodeFromString(responseBody)
     }
+
+    override suspend fun reviewTicket(
+        ticketId: String,
+        request: TicketReviewPayload,
+    ): TicketResponse {
+        val responseBody = execute(
+            method = "POST",
+            path = "/tickets/$ticketId/review",
+            requestBody = json.encodeToString(request),
+        )
+        return json.decodeFromString(responseBody)
+    }
+
+    override fun completionPhotoUrl(ticketId: String): String =
+        "$baseUrl/tickets/$ticketId/completion-photo"
 
     override suspend fun listManagerTickets(): List<TicketResponse> {
         val responseBody = execute(method = "GET", path = "/manager/tickets")

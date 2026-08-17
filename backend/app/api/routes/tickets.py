@@ -6,7 +6,13 @@ from app.api.dependencies import (
     ResidentContextDependency,
     TicketServiceDependency,
 )
-from app.api.schemas import TicketCreateRequest, TicketResponse
+from app.api.schemas import TicketCreateRequest, TicketResponse, TicketReviewRequest
+from app.domain.ticket_workflow import TransitionNotAllowed
+from app.services.tickets import (
+    InvalidResidentReviewError,
+    TicketNotFoundError,
+    TicketVersionConflictError,
+)
 
 router = APIRouter(prefix="/tickets", tags=["tickets"])
 
@@ -53,4 +59,61 @@ def get_ticket(
                 "message": "Ticket not found.",
             },
         )
+    return TicketResponse.from_domain(ticket)
+
+
+@router.get("/{ticket_id}/completion-photo")
+def get_completion_photo(
+    ticket_id: UUID,
+    service: TicketServiceDependency,
+    resident: ResidentContextDependency,
+) -> Response:
+    evidence = service.get_completion_photo(ticket_id, resident)
+    if evidence is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "completion_photo_not_found",
+                "message": "Completion photo not found.",
+            },
+        )
+    return Response(
+        content=evidence.content,
+        media_type=evidence.content_type,
+        headers={"Cache-Control": "private, max-age=300"},
+    )
+
+
+@router.post("/{ticket_id}/review", response_model=TicketResponse)
+def review_ticket(
+    ticket_id: UUID,
+    payload: TicketReviewRequest,
+    service: TicketServiceDependency,
+    resident: ResidentContextDependency,
+) -> TicketResponse:
+    try:
+        ticket = service.review_ticket(ticket_id, payload.to_command(), resident)
+    except TicketNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "ticket_not_found", "message": "Ticket not found."},
+        ) from error
+    except TicketVersionConflictError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ticket_version_conflict",
+                "message": "This request changed. Refresh and try again.",
+            },
+        ) from error
+    except InvalidResidentReviewError as error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "invalid_review", "message": str(error)},
+        ) from error
+    except TransitionNotAllowed as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": error.code, "message": str(error)},
+        ) from error
     return TicketResponse.from_domain(ticket)

@@ -21,9 +21,14 @@ import androidx.compose.material.icons.outlined.AccessTime
 import androidx.compose.material.icons.outlined.AssignmentInd
 import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.PriorityHigh
+import androidx.compose.material.icons.outlined.Star
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -36,6 +41,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.localfix.app.data.resident.ResidentReviewDecision
 import com.localfix.app.ui.components.RequestStatusBadge
 import com.localfix.app.ui.requests.RequestStatusTone
 import com.localfix.app.ui.theme.LocalFixRadius
@@ -46,6 +52,10 @@ import com.localfix.app.ui.theme.LocalFixTheme
 fun ResidentRequestDetailScreen(
     uiState: ResidentRequestDetailUiState?,
     onBack: () -> Unit,
+    onReviewDecisionSelected: (ResidentReviewDecision) -> Unit,
+    onRatingSelected: (Int) -> Unit,
+    onFeedbackChanged: (String) -> Unit,
+    onSubmitReview: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (uiState == null) {
@@ -74,6 +84,48 @@ fun ResidentRequestDetailScreen(
                             .clip(RoundedCornerShape(LocalFixRadius.medium)),
                         contentScale = ContentScale.Crop,
                     )
+                }
+            }
+        }
+        if (uiState.completionNote != null) {
+            item {
+                DetailSection(title = "Worker completion") {
+                    uiState.completionPhotoUrl?.let { photoUrl ->
+                        AsyncImage(
+                            model = photoUrl,
+                            contentDescription = "After-repair photo for ${uiState.title}",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(220.dp)
+                                .clip(RoundedCornerShape(LocalFixRadius.medium))
+                                .testTag("resident-completion-photo"),
+                            contentScale = ContentScale.Crop,
+                        )
+                        Spacer(modifier = Modifier.height(LocalFixSpacing.medium))
+                    }
+                    Text(
+                        text = "Work completed",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                    Text(
+                        text = uiState.completionNote,
+                        modifier = Modifier.padding(top = LocalFixSpacing.extraSmall),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    if (uiState.partsUsed.isNotEmpty()) {
+                        Text(
+                            text = "Parts used",
+                            modifier = Modifier.padding(top = LocalFixSpacing.medium),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                        Text(
+                            text = uiState.partsUsed.joinToString(),
+                            modifier = Modifier.padding(top = LocalFixSpacing.extraSmall),
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                    }
                 }
             }
         }
@@ -121,10 +173,182 @@ fun ResidentRequestDetailScreen(
                 )
             }
         }
+        if (uiState.canReview) {
+            item {
+                ResidentReviewForm(
+                    review = uiState.review,
+                    onDecisionSelected = onReviewDecisionSelected,
+                    onRatingSelected = onRatingSelected,
+                    onFeedbackChanged = onFeedbackChanged,
+                    onSubmit = onSubmitReview,
+                )
+            }
+        } else if (uiState.residentRating != null || uiState.residentFeedback != null) {
+            item { ResidentReviewSummary(uiState) }
+        }
         item {
             Spacer(modifier = Modifier.height(LocalFixSpacing.extraLarge))
         }
     }
+}
+
+@Composable
+private fun ResidentReviewForm(
+    review: ResidentReviewUiState,
+    onDecisionSelected: (ResidentReviewDecision) -> Unit,
+    onRatingSelected: (Int) -> Unit,
+    onFeedbackChanged: (String) -> Unit,
+    onSubmit: () -> Unit,
+) {
+    Column(
+        modifier = Modifier.padding(
+            horizontal = LocalFixSpacing.medium,
+            vertical = LocalFixSpacing.large,
+        ),
+    ) {
+        Text("Review the repair", style = MaterialTheme.typography.titleLarge)
+        Text(
+            text = "Check the completed work before closing this request.",
+            modifier = Modifier.padding(top = LocalFixSpacing.extraSmall),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Row(
+            modifier = Modifier.padding(top = LocalFixSpacing.medium),
+            horizontalArrangement = Arrangement.spacedBy(LocalFixSpacing.small),
+        ) {
+            FilterChip(
+                selected = review.selectedDecision == ResidentReviewDecision.CONFIRM,
+                onClick = { onDecisionSelected(ResidentReviewDecision.CONFIRM) },
+                label = { Text("Repair is complete") },
+                modifier = Modifier.testTag("resident-review-confirm"),
+            )
+            FilterChip(
+                selected = review.selectedDecision == ResidentReviewDecision.REQUEST_REWORK,
+                onClick = { onDecisionSelected(ResidentReviewDecision.REQUEST_REWORK) },
+                label = { Text("Needs more work") },
+                modifier = Modifier.testTag("resident-review-rework"),
+            )
+        }
+        review.decisionError?.let { FormError(it) }
+        if (review.selectedDecision == ResidentReviewDecision.CONFIRM) {
+            Text(
+                text = "Rate the repair",
+                modifier = Modifier.padding(top = LocalFixSpacing.medium),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Row(
+                modifier = Modifier.padding(top = LocalFixSpacing.small),
+                horizontalArrangement = Arrangement.spacedBy(LocalFixSpacing.extraSmall),
+            ) {
+                (1..5).forEach { rating ->
+                    FilterChip(
+                        selected = review.rating == rating,
+                        onClick = { onRatingSelected(rating) },
+                        label = { Text(rating.toString()) },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Outlined.Star,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        },
+                        modifier = Modifier.testTag("resident-rating-$rating"),
+                    )
+                }
+            }
+            review.ratingError?.let { FormError(it) }
+        }
+        if (review.selectedDecision != null) {
+            OutlinedTextField(
+                value = review.feedback,
+                onValueChange = onFeedbackChanged,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = LocalFixSpacing.medium)
+                    .testTag("resident-review-feedback"),
+                label = {
+                    Text(
+                        if (review.selectedDecision == ResidentReviewDecision.REQUEST_REWORK) {
+                            "What still needs attention?"
+                        } else {
+                            "Feedback (optional)"
+                        },
+                    )
+                },
+                supportingText = {
+                    Text(review.feedbackError ?: "${review.feedback.length}/500")
+                },
+                isError = review.feedbackError != null,
+                minLines = 2,
+                maxLines = 4,
+            )
+        }
+        review.submissionError?.let { FormError(it) }
+        Button(
+            onClick = onSubmit,
+            enabled = !review.isSubmitting,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = LocalFixSpacing.medium)
+                .testTag("resident-submit-review"),
+            shape = RoundedCornerShape(LocalFixRadius.medium),
+        ) {
+            if (review.isSubmitting) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    strokeWidth = 2.dp,
+                )
+            } else {
+                Text(
+                    if (review.selectedDecision == ResidentReviewDecision.REQUEST_REWORK) {
+                        "Request more work"
+                    } else {
+                        "Confirm repair"
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ResidentReviewSummary(uiState: ResidentRequestDetailUiState) {
+    DetailSection(title = "Your review") {
+        uiState.residentRating?.let { rating ->
+            DetailRow(
+                icon = Icons.Outlined.Star,
+                label = "Your rating",
+                value = "$rating out of 5",
+            )
+        }
+        uiState.residentFeedback?.let { feedback ->
+            if (uiState.residentRating != null) {
+                Spacer(modifier = Modifier.height(LocalFixSpacing.medium))
+            }
+            Text(
+                text = if (uiState.residentRating == null) "Rework requested" else "Feedback",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelMedium,
+            )
+            Text(
+                text = feedback,
+                modifier = Modifier.padding(top = LocalFixSpacing.extraSmall),
+                style = MaterialTheme.typography.bodyLarge,
+            )
+        }
+    }
+}
+
+@Composable
+private fun FormError(message: String) {
+    Text(
+        text = message,
+        modifier = Modifier.padding(top = LocalFixSpacing.small),
+        color = MaterialTheme.colorScheme.error,
+        style = MaterialTheme.typography.bodySmall,
+    )
 }
 
 @Composable
@@ -295,6 +519,7 @@ private fun ResidentRequestDetailPreview() {
     LocalFixTheme(darkTheme = false) {
         ResidentRequestDetailScreen(
             uiState = ResidentRequestDetailUiState(
+                requestId = "LF-1042",
                 id = "LF-1042",
                 title = "Leaking kitchen tap",
                 description = "The tap keeps dripping even when fully closed.",
@@ -306,8 +531,19 @@ private fun ResidentRequestDetailPreview() {
                 assignedWorker = "Arun · Plumbing",
                 updatedLabel = "Updated 18 min ago",
                 photoUri = null,
+                completionNote = null,
+                partsUsed = emptyList(),
+                completionPhotoUrl = null,
+                residentRating = null,
+                residentFeedback = null,
+                canReview = false,
+                review = ResidentReviewUiState(),
             ),
             onBack = {},
+            onReviewDecisionSelected = {},
+            onRatingSelected = {},
+            onFeedbackChanged = {},
+            onSubmitReview = {},
         )
     }
 }

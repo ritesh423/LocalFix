@@ -1,11 +1,12 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.domain.ticket_workflow import TicketStatus
 from app.domain.tickets import (
     AccessWindow,
+    ResidentReviewDecision,
     ServiceCategory,
     Ticket,
     TicketPriority,
@@ -15,6 +16,7 @@ from app.domain.tickets import (
 from app.services.tickets import (
     AssignTicketCommand,
     CreateTicketCommand,
+    ReviewTicketCommand,
     StartTicketCommand,
 )
 
@@ -62,6 +64,36 @@ class TicketStartRequest(BaseModel):
         return StartTicketCommand(expected_version=self.expected_version)
 
 
+class TicketReviewRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    expected_version: int = Field(ge=1)
+    decision: ResidentReviewDecision
+    rating: int | None = Field(default=None, ge=1, le=5)
+    feedback: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_decision_fields(self) -> "TicketReviewRequest":
+        if self.decision is ResidentReviewDecision.CONFIRM and self.rating is None:
+            raise ValueError("A rating is required to confirm the repair.")
+        if (
+            self.decision is ResidentReviewDecision.REQUEST_REWORK
+            and (self.feedback is None or len(self.feedback.strip()) < 10)
+        ):
+            raise ValueError(
+                "Describe what still needs attention in at least 10 characters."
+            )
+        return self
+
+    def to_command(self) -> ReviewTicketCommand:
+        return ReviewTicketCommand(
+            expected_version=self.expected_version,
+            decision=self.decision,
+            rating=self.rating,
+            feedback=self.feedback,
+        )
+
+
 class WorkerResponse(BaseModel):
     id: UUID
     name: str
@@ -96,6 +128,9 @@ class TicketResponse(BaseModel):
     parts_used: list[str]
     has_completion_photo: bool
     completion_submitted_at: datetime | None
+    resident_rating: int | None
+    resident_feedback: str | None
+    resident_reviewed_at: datetime | None
     created_at: datetime
     updated_at: datetime
 
@@ -121,6 +156,9 @@ class TicketResponse(BaseModel):
             parts_used=list(ticket.parts_used),
             has_completion_photo=ticket.completion_photo_key is not None,
             completion_submitted_at=ticket.completion_submitted_at,
+            resident_rating=ticket.resident_rating,
+            resident_feedback=ticket.resident_feedback,
+            resident_reviewed_at=ticket.resident_reviewed_at,
             created_at=ticket.created_at,
             updated_at=ticket.updated_at,
         )
