@@ -78,4 +78,43 @@ class LocalFixDatabaseMigrationTest {
             assertEquals("", cursor.getString(1))
         }
     }
+
+    @Test
+    fun migrationFromThreeToFourKeepsDraftAndAddsResidentTicketCache() {
+        val databaseName = "localfix-migration-three-four-test.db"
+        migrationHelper.createDatabase(databaseName, 3).apply {
+            execSQL(
+                """
+                INSERT INTO request_drafts
+                    (id, clientRequestId, category, title, description,
+                     urgencySuggestion, accessWindow, photoUri)
+                VALUES
+                    (1, '50000000-0000-0000-0000-000000000004', 'PLUMBING',
+                     'Leaking tap', 'Water is dripping below the sink.',
+                     'SOON', 'MORNING', NULL)
+                """.trimIndent(),
+            )
+            close()
+        }
+
+        val migratedDatabase = migrationHelper.runMigrationsAndValidate(
+            databaseName,
+            4,
+            true,
+            MIGRATION_3_4,
+        )
+
+        migratedDatabase.query(
+            "SELECT title FROM request_drafts WHERE id = 1",
+        ).use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("Leaking tap", cursor.getString(0))
+        }
+        migratedDatabase.query(
+            "SELECT COUNT(*) FROM resident_tickets",
+        ).use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(0, cursor.getInt(0))
+        }
+    }
 }

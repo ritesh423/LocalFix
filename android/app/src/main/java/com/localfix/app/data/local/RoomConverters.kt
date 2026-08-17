@@ -3,7 +3,10 @@ package com.localfix.app.data.local
 import androidx.room.TypeConverter
 import com.localfix.app.data.model.AccessWindow
 import com.localfix.app.data.model.ServiceCategory
+import com.localfix.app.data.model.TicketStatus
 import com.localfix.app.data.model.UrgencySuggestion
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 class RoomConverters {
     @TypeConverter
@@ -24,4 +27,16 @@ class RoomConverters {
 
     @TypeConverter
     fun stringToAccessWindow(value: String): AccessWindow = AccessWindow.valueOf(value)
+
+    @TypeConverter
+    fun ticketStatusToString(value: TicketStatus): String = value.name
+
+    @TypeConverter
+    fun stringToTicketStatus(value: String): TicketStatus = TicketStatus.valueOf(value)
+
+    @TypeConverter
+    fun stringListToJson(value: List<String>): String = Json.encodeToString(value)
+
+    @TypeConverter
+    fun jsonToStringList(value: String): List<String> = Json.decodeFromString(value)
 }

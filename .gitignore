@@ -25,8 +25,18 @@ backend/uploads/
 .env
 .env.*
 !.env.example
+.envrc
+.secrets
+.secrets.*
 *.jks
 *.keystore
+*.pem
+*.key
+*.p12
+*.pfx
+*.mobileprovision
+credentials*.json
+secrets*.json
 service-account*.json
 google-services.json
 

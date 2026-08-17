@@ -5,10 +5,16 @@ import com.localfix.app.data.model.NewMaintenanceRequest
 import com.localfix.app.data.model.ServiceCategory
 import com.localfix.app.data.model.TicketStatus
 import com.localfix.app.data.model.UrgencySuggestion
+import com.localfix.app.data.local.ResidentTicketDao
+import com.localfix.app.data.local.ResidentTicketEntity
 import com.localfix.app.data.remote.TicketApi
 import com.localfix.app.data.remote.TicketCreatePayload
 import com.localfix.app.data.remote.TicketReviewPayload
 import com.localfix.app.data.remote.TicketResponse
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -18,6 +24,7 @@ import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class ApiResidentRepositoryTest {
     private val clock = Clock.fixed(
         Instant.parse("2026-08-12T10:05:00Z"),
@@ -29,9 +36,10 @@ class ApiResidentRepositoryTest {
         val ticketApi = FakeTicketApi(
             tickets = mutableListOf(ticketResponse()),
         )
-        val repository = ApiResidentRepository(ticketApi, clock)
+        val repository = ApiResidentRepository(ticketApi, FakeResidentTicketDao(), backgroundScope, clock)
 
         repository.refreshRequests()
+        runCurrent()
 
         val request = repository.residentData.value.requests.single()
         assertEquals("90000000-0000-0000-0000-000000000001", request.id)
@@ -45,7 +53,7 @@ class ApiResidentRepositoryTest {
     @Test
     fun createSendsStableClientRequestIdAndUpdatesLocalState() = runTest {
         val ticketApi = FakeTicketApi()
-        val repository = ApiResidentRepository(ticketApi, clock)
+        val repository = ApiResidentRepository(ticketApi, FakeResidentTicketDao(), backgroundScope, clock)
 
         val requestId = repository.createRequest(
             NewMaintenanceRequest(
@@ -57,6 +65,7 @@ class ApiResidentRepositoryTest {
                 accessWindow = AccessWindow.MORNING,
             ),
         )
+        runCurrent()
 
         assertEquals("90000000-0000-0000-0000-000000000001", requestId)
         assertEquals(
@@ -70,6 +79,8 @@ class ApiResidentRepositoryTest {
     fun connectionFailureBecomesVisibleRepositoryState() = runTest {
         val repository = ApiResidentRepository(
             ticketApi = FakeTicketApi(listFailure = IOException("offline")),
+            residentTicketDao = FakeResidentTicketDao(),
+            applicationScope = backgroundScope,
             clock = clock,
         )
 
@@ -85,8 +96,9 @@ class ApiResidentRepositoryTest {
         val ticketApi = FakeTicketApi(
             tickets = mutableListOf(ticketResponse()),
         )
-        val repository = ApiResidentRepository(ticketApi, clock)
+        val repository = ApiResidentRepository(ticketApi, FakeResidentTicketDao(), backgroundScope, clock)
         repository.refreshRequests()
+        runCurrent()
         ticketApi.listFailure = IOException("offline")
 
         repository.refreshRequests()
@@ -109,9 +121,10 @@ class ApiResidentRepositoryTest {
                 ),
             ),
         )
-        val repository = ApiResidentRepository(ticketApi, clock)
+        val repository = ApiResidentRepository(ticketApi, FakeResidentTicketDao(), backgroundScope, clock)
 
         repository.refreshRequests()
+        runCurrent()
 
         val request = repository.residentData.value.requests.single()
         assertEquals(TicketStatus.AWAITING_CONFIRMATION, request.status)
@@ -130,8 +143,9 @@ class ApiResidentRepositoryTest {
                 ticketResponse().copy(status = "awaiting_confirmation", version = 4),
             ),
         )
-        val repository = ApiResidentRepository(ticketApi, clock)
+        val repository = ApiResidentRepository(ticketApi, FakeResidentTicketDao(), backgroundScope, clock)
         repository.refreshRequests()
+        runCurrent()
 
         repository.reviewRequest(
             ticketId = "90000000-0000-0000-0000-000000000001",
@@ -140,6 +154,7 @@ class ApiResidentRepositoryTest {
             rating = 5,
             feedback = "Repair looks good.",
         )
+        runCurrent()
 
         assertEquals(4, ticketApi.lastReviewPayload?.expectedVersion)
         assertEquals("confirm", ticketApi.lastReviewPayload?.decision)
@@ -147,6 +162,26 @@ class ApiResidentRepositoryTest {
         val reviewed = repository.residentData.value.requests.single()
         assertEquals(TicketStatus.COMPLETED, reviewed.status)
         assertEquals(5, reviewed.residentRating)
+    }
+
+    @Test
+    fun cachedTicketsAreShownWhenARefreshFailsAfterRepositoryRecreation() = runTest {
+        val cachedTicket = ticketEntity(title = "Cached plumbing request")
+        val ticketDao = FakeResidentTicketDao(listOf(cachedTicket))
+        val repository = ApiResidentRepository(
+            ticketApi = FakeTicketApi(listFailure = IOException("offline")),
+            residentTicketDao = ticketDao,
+            applicationScope = backgroundScope,
+            clock = clock,
+        )
+        runCurrent()
+
+        repository.refreshRequests()
+        runCurrent()
+
+        assertEquals("Cached plumbing request", repository.residentData.value.requests.single().title)
+        val state = repository.requestSyncState.value as RequestSyncState.Error
+        assertTrue(state.hasPreviousResult)
     }
 
     private fun ticketResponse(
@@ -166,6 +201,54 @@ class ApiResidentRepositoryTest {
         createdAt = "2026-08-12T10:00:00Z",
         updatedAt = "2026-08-12T10:00:00Z",
     )
+
+    private fun ticketEntity(
+        title: String,
+    ) = ResidentTicketEntity(
+        id = "90000000-0000-0000-0000-000000000001",
+        propertyId = "10000000-0000-0000-0000-000000000001",
+        unitId = "30000000-0000-0000-0000-000000000204",
+        residentId = "40000000-0000-0000-0000-000000000001",
+        title = title,
+        description = "The tap keeps dripping even when fully closed.",
+        category = ServiceCategory.PLUMBING,
+        status = TicketStatus.OPEN,
+        urgencySuggestion = UrgencySuggestion.SOON,
+        accessWindow = AccessWindow.MORNING,
+        assignedWorker = null,
+        version = 1,
+        completionNote = null,
+        partsUsed = emptyList(),
+        hasCompletionPhoto = false,
+        residentRating = null,
+        residentFeedback = null,
+        createdAt = "2026-08-12T10:00:00Z",
+        updatedAt = "2026-08-12T10:00:00Z",
+    )
+
+    private class FakeResidentTicketDao(
+        initialTickets: List<ResidentTicketEntity> = emptyList(),
+    ) : ResidentTicketDao {
+        private val tickets = MutableStateFlow(initialTickets.sortedByDescending { it.updatedAt })
+
+        override fun observeTickets(): Flow<List<ResidentTicketEntity>> = tickets
+
+        override suspend fun countTickets(): Int = tickets.value.size
+
+        override suspend fun upsertTicket(ticket: ResidentTicketEntity) {
+            upsertTickets(listOf(ticket))
+        }
+
+        override suspend fun upsertTickets(tickets: List<ResidentTicketEntity>) {
+            val incomingById = tickets.associateBy(ResidentTicketEntity::id)
+            this.tickets.value = (this.tickets.value.filterNot { it.id in incomingById } + tickets)
+                .sortedByDescending { it.updatedAt }
+        }
+
+        override suspend fun deleteAllTickets() {
+            tickets.value = emptyList()
+        }
+    }
 
     private inner class FakeTicketApi(
         private val tickets: MutableList<TicketResponse> = mutableListOf(),

@@ -8,60 +8,61 @@ import com.localfix.app.data.model.ResidentData
 import com.localfix.app.data.model.ServiceCategory
 import com.localfix.app.data.model.TicketStatus
 import com.localfix.app.data.model.UrgencySuggestion
+import com.localfix.app.data.local.ResidentTicketDao
+import com.localfix.app.data.local.ResidentTicketEntity
 import com.localfix.app.data.remote.TicketApi
 import com.localfix.app.data.remote.TicketCreatePayload
 import com.localfix.app.data.remote.TicketReviewPayload
 import com.localfix.app.data.remote.TicketResponse
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 
 class ApiResidentRepository(
     private val ticketApi: TicketApi,
+    private val residentTicketDao: ResidentTicketDao,
+    applicationScope: CoroutineScope,
     private val clock: Clock = Clock.systemUTC(),
 ) : ResidentRepository {
-    private val mutableResidentData = MutableStateFlow(emptyResidentData())
     private val mutableRequestSyncState =
         MutableStateFlow<RequestSyncState>(RequestSyncState.InitialLoading)
-    private var hasLoadedRequests = false
 
-    override val residentData: StateFlow<ResidentData> = mutableResidentData.asStateFlow()
+    override val residentData: StateFlow<ResidentData> = residentTicketDao.observeTickets()
+        .map { tickets ->
+            emptyResidentData().copy(
+                requests = tickets.map { it.toMaintenanceRequest(ticketApi, clock) },
+            )
+        }
+        .stateIn(
+            scope = applicationScope,
+            started = SharingStarted.Eagerly,
+            initialValue = emptyResidentData(),
+        )
     override val requestSyncState: StateFlow<RequestSyncState> =
-        mutableRequestSyncState.asStateFlow()
+        mutableRequestSyncState
 
     override suspend fun refreshRequests() {
-        mutableRequestSyncState.value = if (hasLoadedRequests) {
+        val hasCachedRequests = residentTicketDao.countTickets() > 0
+        mutableRequestSyncState.value = if (hasCachedRequests) {
             RequestSyncState.Refreshing
         } else {
             RequestSyncState.InitialLoading
         }
         runCatching { ticketApi.listTickets() }
             .onSuccess { tickets ->
-                mutableResidentData.update { data ->
-                    data.copy(
-                        requests = tickets.map {
-                            it.toMaintenanceRequest(
-                                clock = clock,
-                                completionPhotoUrl = if (it.hasCompletionPhoto) {
-                                    ticketApi.completionPhotoUrl(it.id)
-                                } else {
-                                    null
-                                },
-                            )
-                        },
-                    )
-                }
-                hasLoadedRequests = true
+                residentTicketDao.replaceAllTickets(tickets.map(TicketResponse::toEntity))
                 mutableRequestSyncState.value = RequestSyncState.Ready
             }
             .onFailure {
                 mutableRequestSyncState.value = RequestSyncState.Error(
                     message = CONNECTION_ERROR,
-                    hasPreviousResult = hasLoadedRequests,
+                    hasPreviousResult = hasCachedRequests,
                 )
             }
     }
@@ -70,14 +71,7 @@ class ApiResidentRepository(
         return runCatching {
             ticketApi.createTicket(request.toPayload())
         }.onSuccess { createdTicket ->
-            val requestModel = createdTicket.toMaintenanceRequest(clock, null)
-            mutableResidentData.update { data ->
-                data.copy(
-                    requests = listOf(requestModel) + data.requests.filterNot { existing ->
-                        existing.id == requestModel.id
-                    },
-                )
-            }
+            residentTicketDao.upsertTicket(createdTicket.toEntity())
         }.getOrThrow().id
     }
 
@@ -97,21 +91,7 @@ class ApiResidentRepository(
                 feedback = feedback,
             ),
         )
-        val requestModel = reviewed.toMaintenanceRequest(
-            clock = clock,
-            completionPhotoUrl = if (reviewed.hasCompletionPhoto) {
-                ticketApi.completionPhotoUrl(reviewed.id)
-            } else {
-                null
-            },
-        )
-        mutableResidentData.update { data ->
-            data.copy(
-                requests = data.requests.map { existing ->
-                    if (existing.id == requestModel.id) requestModel else existing
-                },
-            )
-        }
+        residentTicketDao.upsertTicket(reviewed.toEntity())
     }
 
     private companion object {
@@ -141,24 +121,46 @@ private fun NewMaintenanceRequest.toPayload(): TicketCreatePayload = TicketCreat
     accessWindow = accessWindow.name.lowercase(),
 )
 
-private fun TicketResponse.toMaintenanceRequest(
+private fun TicketResponse.toEntity(): ResidentTicketEntity = ResidentTicketEntity(
+    id = id,
+    propertyId = propertyId.orEmpty(),
+    unitId = unitId,
+    residentId = residentId.orEmpty(),
+    title = title,
+    description = description,
+    category = ServiceCategory.valueOf(category.uppercase()),
+    status = TicketStatus.valueOf(status.uppercase()),
+    urgencySuggestion = UrgencySuggestion.valueOf(urgencySuggestion.uppercase()),
+    accessWindow = AccessWindow.valueOf(accessWindow.uppercase()),
+    assignedWorker = assignedWorker,
+    version = version,
+    completionNote = completionNote,
+    partsUsed = partsUsed,
+    hasCompletionPhoto = hasCompletionPhoto,
+    residentRating = residentRating,
+    residentFeedback = residentFeedback,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+)
+
+private fun ResidentTicketEntity.toMaintenanceRequest(
+    ticketApi: TicketApi,
     clock: Clock,
-    completionPhotoUrl: String?,
 ): MaintenanceRequest =
     MaintenanceRequest(
         id = id,
         title = title,
         description = description,
-        category = ServiceCategory.valueOf(category.uppercase()),
-        status = TicketStatus.valueOf(status.uppercase()),
-        urgencySuggestion = UrgencySuggestion.valueOf(urgencySuggestion.uppercase()),
-        accessWindow = AccessWindow.valueOf(accessWindow.uppercase()),
+        category = category,
+        status = status,
+        urgencySuggestion = urgencySuggestion,
+        accessWindow = accessWindow,
         assignedWorker = assignedWorker ?: "Awaiting assignment",
         updatedLabel = updatedAt.toUpdatedLabel(clock),
         version = version,
         completionNote = completionNote,
         partsUsed = partsUsed,
-        completionPhotoUrl = completionPhotoUrl,
+        completionPhotoUrl = if (hasCompletionPhoto) ticketApi.completionPhotoUrl(id) else null,
         residentRating = residentRating,
         residentFeedback = residentFeedback,
     )

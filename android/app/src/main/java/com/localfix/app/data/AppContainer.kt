@@ -7,6 +7,7 @@ import com.localfix.app.data.draft.RoomRequestDraftRepository
 import com.localfix.app.data.local.LocalFixDatabase
 import com.localfix.app.data.local.MIGRATION_1_2
 import com.localfix.app.data.local.MIGRATION_2_3
+import com.localfix.app.data.local.MIGRATION_3_4
 import com.localfix.app.data.manager.ApiManagerRepository
 import com.localfix.app.data.manager.ManagerRepository
 import com.localfix.app.data.remote.HttpTicketApi
@@ -15,6 +16,9 @@ import com.localfix.app.data.resident.ResidentRepository
 import com.localfix.app.data.worker.ApiWorkerRepository
 import com.localfix.app.data.worker.WorkerRepository
 import com.localfix.app.R
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 
 interface AppContainer {
     val residentRepository: ResidentRepository
@@ -24,11 +28,13 @@ interface AppContainer {
 }
 
 class DefaultAppContainer(context: Context) : AppContainer {
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     private val database = Room.databaseBuilder(
         context,
         LocalFixDatabase::class.java,
         "localfix.db",
-    ).addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+    ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
         .build()
 
     private val ticketApi = HttpTicketApi(
@@ -38,6 +44,8 @@ class DefaultAppContainer(context: Context) : AppContainer {
 
     override val residentRepository: ResidentRepository = ApiResidentRepository(
         ticketApi = ticketApi,
+        residentTicketDao = database.residentTicketDao(),
+        applicationScope = applicationScope,
     )
     override val managerRepository: ManagerRepository = ApiManagerRepository(ticketApi)
     override val workerRepository: WorkerRepository = ApiWorkerRepository(ticketApi)
