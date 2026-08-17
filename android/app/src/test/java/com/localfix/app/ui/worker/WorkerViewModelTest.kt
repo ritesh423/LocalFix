@@ -104,6 +104,29 @@ class WorkerViewModelTest {
         )
     }
 
+    @Test
+    fun returnedJobShowsTheResidentsReasonAndImmutableActivity() = runTest {
+        val viewModel = WorkerViewModel(SampleWorkerRepository())
+        advanceUntilIdle()
+
+        viewModel.openJob(ASSIGNED_JOB_ID)
+        advanceUntilIdle()
+
+        val detail = viewModel.uiState.value.detail
+        assertEquals(
+            "The lower pipe joint is still dripping after using the sink.",
+            detail.job?.reworkReason,
+        )
+        assertEquals("Resident requested more work", detail.history.last().title)
+        assertEquals(5, detail.history.last().ticketVersion)
+
+        viewModel.startJob()
+        advanceUntilIdle()
+
+        assertEquals("Work started", viewModel.uiState.value.detail.history.last().title)
+        assertEquals(6, viewModel.uiState.value.detail.history.last().ticketVersion)
+    }
+
     private companion object {
         const val ASSIGNED_JOB_ID = "90000000-0000-0000-0000-000000000001"
         const val IN_PROGRESS_JOB_ID = "90000000-0000-0000-0000-000000000002"

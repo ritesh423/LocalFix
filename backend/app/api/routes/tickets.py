@@ -6,7 +6,12 @@ from app.api.dependencies import (
     ResidentContextDependency,
     TicketServiceDependency,
 )
-from app.api.schemas import TicketCreateRequest, TicketResponse, TicketReviewRequest
+from app.api.schemas import (
+    TicketCreateRequest,
+    TicketEventResponse,
+    TicketResponse,
+    TicketReviewRequest,
+)
 from app.domain.ticket_workflow import TransitionNotAllowed
 from app.services.tickets import (
     InvalidResidentReviewError,
@@ -60,6 +65,22 @@ def get_ticket(
             },
         )
     return TicketResponse.from_domain(ticket)
+
+
+@router.get("/{ticket_id}/events", response_model=list[TicketEventResponse])
+def list_ticket_events(
+    ticket_id: UUID,
+    service: TicketServiceDependency,
+    resident: ResidentContextDependency,
+) -> list[TicketEventResponse]:
+    try:
+        events = service.list_resident_ticket_events(ticket_id, resident)
+    except TicketNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "ticket_not_found", "message": "Ticket not found."},
+        ) from error
+    return [TicketEventResponse.from_domain(event) for event in events]
 
 
 @router.get("/{ticket_id}/completion-photo")

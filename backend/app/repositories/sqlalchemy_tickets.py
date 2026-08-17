@@ -5,12 +5,13 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.database.models import TicketRecord
-from app.domain.ticket_workflow import TicketStatus
+from app.database.models import TicketEventRecord, TicketRecord
+from app.domain.ticket_workflow import TicketAction, TicketStatus, UserRole
 from app.domain.tickets import (
     AccessWindow,
     ServiceCategory,
     Ticket,
+    TicketEvent,
     TicketPriority,
     UrgencySuggestion,
 )
@@ -20,7 +21,11 @@ class SqlAlchemyTicketRepository:
     def __init__(self, session_factory: sessionmaker[Session]) -> None:
         self._session_factory = session_factory
 
-    def create(self, ticket: Ticket) -> tuple[Ticket, bool]:
+    def create(
+        self,
+        ticket: Ticket,
+        event: TicketEvent,
+    ) -> tuple[Ticket, bool]:
         with self._session_factory() as session:
             existing = self._find_by_client_request_id(
                 session,
@@ -31,6 +36,7 @@ class SqlAlchemyTicketRepository:
 
             record = _record_from_domain(ticket)
             session.add(record)
+            session.add(_event_record_from_domain(event))
             try:
                 session.commit()
             except IntegrityError:
@@ -136,6 +142,7 @@ class SqlAlchemyTicketRepository:
         self,
         ticket: Ticket,
         expected_version: int,
+        event: TicketEvent,
     ) -> bool:
         statement = (
             update(TicketRecord)
@@ -165,8 +172,19 @@ class SqlAlchemyTicketRepository:
             if result.rowcount != 1:
                 session.rollback()
                 return False
+            session.add(_event_record_from_domain(event))
             session.commit()
             return True
+
+    def list_events(self, ticket_id: UUID) -> list[TicketEvent]:
+        statement = (
+            select(TicketEventRecord)
+            .where(TicketEventRecord.ticket_id == ticket_id)
+            .order_by(TicketEventRecord.created_at.asc(), TicketEventRecord.id.asc())
+        )
+        with self._session_factory() as session:
+            records = session.scalars(statement).all()
+            return [_event_record_to_domain(record) for record in records]
 
     @staticmethod
     def _find_by_client_request_id(
@@ -241,6 +259,38 @@ def _record_to_domain(record: TicketRecord) -> Ticket:
         else None,
         created_at=_ensure_utc(record.created_at),
         updated_at=_ensure_utc(record.updated_at),
+    )
+
+
+def _event_record_from_domain(event: TicketEvent) -> TicketEventRecord:
+    return TicketEventRecord(
+        id=event.id,
+        ticket_id=event.ticket_id,
+        actor_role=event.actor_role.value,
+        actor_id=event.actor_id,
+        action=event.action.value,
+        from_status=event.from_status.value if event.from_status is not None else None,
+        to_status=event.to_status.value,
+        ticket_version=event.ticket_version,
+        detail=event.detail,
+        created_at=event.created_at,
+    )
+
+
+def _event_record_to_domain(record: TicketEventRecord) -> TicketEvent:
+    return TicketEvent(
+        id=record.id,
+        ticket_id=record.ticket_id,
+        actor_role=UserRole(record.actor_role),
+        actor_id=record.actor_id,
+        action=TicketAction(record.action),
+        from_status=TicketStatus(record.from_status)
+        if record.from_status is not None
+        else None,
+        to_status=TicketStatus(record.to_status),
+        ticket_version=record.ticket_version,
+        detail=record.detail,
+        created_at=_ensure_utc(record.created_at),
     )
 
 

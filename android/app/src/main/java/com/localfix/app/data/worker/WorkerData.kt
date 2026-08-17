@@ -26,5 +26,15 @@ data class WorkerJob(
     val completionNote: String?,
     val partsUsed: List<String>,
     val hasCompletionPhoto: Boolean,
+    val reworkReason: String?,
     val updatedLabel: String,
+)
+
+data class WorkerJobEvent(
+    val id: String,
+    val title: String,
+    val detail: String?,
+    val statusLabel: String,
+    val timeLabel: String,
+    val ticketVersion: Int,
 )

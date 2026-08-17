@@ -3,12 +3,13 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.domain.ticket_workflow import TicketStatus
+from app.domain.ticket_workflow import TicketAction, TicketStatus, UserRole
 from app.domain.tickets import (
     AccessWindow,
     ResidentReviewDecision,
     ServiceCategory,
     Ticket,
+    TicketEvent,
     TicketPriority,
     UrgencySuggestion,
     Worker,
@@ -105,6 +106,32 @@ class WorkerResponse(BaseModel):
             id=worker.id,
             name=worker.name,
             specialty=worker.specialty,
+        )
+
+
+class TicketEventResponse(BaseModel):
+    id: UUID
+    ticket_id: UUID
+    actor_role: UserRole
+    action: TicketAction
+    from_status: TicketStatus | None
+    to_status: TicketStatus
+    ticket_version: int
+    detail: str | None
+    created_at: datetime
+
+    @classmethod
+    def from_domain(cls, event: TicketEvent) -> "TicketEventResponse":
+        return cls(
+            id=event.id,
+            ticket_id=event.ticket_id,
+            actor_role=event.actor_role,
+            action=event.action,
+            from_status=event.from_status,
+            to_status=event.to_status,
+            ticket_version=event.ticket_version,
+            detail=event.detail,
+            created_at=event.created_at,
         )
 
 

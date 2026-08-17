@@ -3,7 +3,7 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import UUID
 
-from app.domain.ticket_workflow import TicketStatus
+from app.domain.ticket_workflow import TicketAction, TicketStatus, UserRole
 
 
 class ServiceCategory(StrEnum):
@@ -91,3 +91,17 @@ class Ticket:
     resident_reviewed_at: datetime | None
     created_at: datetime
     updated_at: datetime
+
+
+@dataclass(frozen=True)
+class TicketEvent:
+    id: UUID
+    ticket_id: UUID
+    actor_role: UserRole
+    actor_id: UUID | None
+    action: TicketAction
+    from_status: TicketStatus | None
+    to_status: TicketStatus
+    ticket_version: int
+    detail: str | None
+    created_at: datetime

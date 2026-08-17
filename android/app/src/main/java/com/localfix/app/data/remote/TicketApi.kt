@@ -39,6 +39,8 @@ interface ManagerTicketApi {
 interface WorkerTicketApi {
     suspend fun listWorkerTickets(): List<TicketResponse>
 
+    suspend fun listWorkerTicketEvents(ticketId: String): List<TicketEventResponse>
+
     suspend fun startTicket(
         ticketId: String,
         request: TicketStartPayload,
@@ -122,6 +124,19 @@ data class TicketResponse(
     @SerialName("updated_at") val updatedAt: String,
 )
 
+@Serializable
+data class TicketEventResponse(
+    val id: String,
+    @SerialName("ticket_id") val ticketId: String,
+    @SerialName("actor_role") val actorRole: String,
+    val action: String,
+    @SerialName("from_status") val fromStatus: String? = null,
+    @SerialName("to_status") val toStatus: String,
+    @SerialName("ticket_version") val ticketVersion: Int,
+    val detail: String? = null,
+    @SerialName("created_at") val createdAt: String,
+)
+
 class HttpTicketApi(
     baseUrl: String,
     private val contentResolver: ContentResolver,
@@ -182,6 +197,16 @@ class HttpTicketApi(
 
     override suspend fun listWorkerTickets(): List<TicketResponse> {
         val responseBody = execute(method = "GET", path = "/worker/tickets")
+        return json.decodeFromString(responseBody)
+    }
+
+    override suspend fun listWorkerTicketEvents(
+        ticketId: String,
+    ): List<TicketEventResponse> {
+        val responseBody = execute(
+            method = "GET",
+            path = "/worker/tickets/$ticketId/events",
+        )
         return json.decodeFromString(responseBody)
     }
 

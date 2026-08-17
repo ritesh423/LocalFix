@@ -13,12 +13,15 @@ class TicketStatus(StrEnum):
 
 
 class UserRole(StrEnum):
+    SYSTEM = "system"
     RESIDENT = "resident"
     MANAGER = "manager"
     WORKER = "worker"
 
 
 class TicketAction(StrEnum):
+    CREATE = "create"
+    HISTORY_STARTED = "history_started"
     ASSIGN = "assign"
     REASSIGN = "reassign"
     START = "start"

@@ -27,7 +27,9 @@ import androidx.compose.material.icons.outlined.AddPhotoAlternate
 import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.PriorityHigh
+import androidx.compose.material.icons.outlined.Replay
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -102,6 +104,9 @@ fun WorkerJobDetailScreen(
             .testTag("worker-job-detail"),
     ) {
         item { WorkerJobHeader(job = job, onBack = onBack) }
+        job.reworkReason?.let { reason ->
+            item { ReworkRequestCard(reason) }
+        }
         item {
             WorkerDetailSection(title = "Issue details") {
                 WorkerInformationRow(
@@ -239,7 +244,126 @@ fun WorkerJobDetailScreen(
                 SubmittedCompletionCard(job = job, justSubmitted = uiState.hasJustSubmittedCompletion)
             }
         }
+        item { WorkerHistorySection(uiState) }
         item { Spacer(modifier = Modifier.height(LocalFixSpacing.extraLarge)) }
+    }
+}
+
+@Composable
+private fun ReworkRequestCard(reason: String) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(LocalFixSpacing.medium)
+            .testTag("worker-rework-reason"),
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        shape = RoundedCornerShape(LocalFixRadius.large),
+    ) {
+        Row(
+            modifier = Modifier.padding(LocalFixSpacing.medium),
+            horizontalArrangement = Arrangement.spacedBy(LocalFixSpacing.medium),
+        ) {
+            Icon(imageVector = Icons.Outlined.Replay, contentDescription = null)
+            Column {
+                Text(
+                    text = "Resident requested more work",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    text = reason,
+                    modifier = Modifier.padding(top = LocalFixSpacing.extraSmall),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun WorkerHistorySection(uiState: WorkerJobDetailUiState) {
+    WorkerDetailSection(title = "Job activity") {
+        when {
+            uiState.isHistoryLoading -> {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(LocalFixSpacing.small),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    Text("Loading job activity…")
+                }
+            }
+            uiState.historyError != null -> {
+                Text(
+                    text = uiState.historyError,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            uiState.history.isEmpty() -> {
+                Text(
+                    text = "No activity has been recorded yet.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            else -> {
+                Column(
+                    modifier = Modifier.testTag("worker-history"),
+                    verticalArrangement = Arrangement.spacedBy(LocalFixSpacing.medium),
+                ) {
+                    uiState.history.asReversed().forEach { event ->
+                        WorkerHistoryRow(event)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WorkerHistoryRow(event: WorkerHistoryItem) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(LocalFixSpacing.medium),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Surface(
+            color = MaterialTheme.colorScheme.secondaryContainer,
+            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            shape = CircleShape,
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.History,
+                contentDescription = null,
+                modifier = Modifier.padding(LocalFixSpacing.small),
+            )
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(event.title, style = MaterialTheme.typography.titleSmall)
+                Text(
+                    text = "v${event.ticketVersion}",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
+            Text(
+                text = "${event.statusLabel} · ${event.timeLabel}",
+                modifier = Modifier.padding(top = LocalFixSpacing.extraSmall),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+            )
+            event.detail?.let { detail ->
+                Text(
+                    text = detail,
+                    modifier = Modifier.padding(top = LocalFixSpacing.extraSmall),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
     }
 }
 
@@ -438,7 +562,11 @@ private fun SubmittedCompletionCard(
                 style = MaterialTheme.typography.titleMedium,
             )
             Text(
-                text = "The resident can now review and confirm the repair.",
+                text = if (job.statusLabel == "Completed") {
+                    "The resident confirmed that this repair is complete."
+                } else {
+                    "The resident can now review and confirm the repair."
+                },
                 modifier = Modifier.padding(top = LocalFixSpacing.extraSmall),
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -626,6 +754,17 @@ private fun WorkerJobDetailPreview() {
                     completionNote = null,
                     partsUsed = emptyList(),
                     hasCompletionPhoto = false,
+                    reworkReason = "The lower pipe joint is still dripping.",
+                ),
+                history = listOf(
+                    WorkerHistoryItem(
+                        id = "event-1",
+                        title = "Resident requested more work",
+                        detail = "The lower pipe joint is still dripping.",
+                        statusLabel = "Ready to start",
+                        timeLabel = "Updated 12 min ago",
+                        ticketVersion = 5,
+                    ),
                 ),
             ),
             onBack = {},

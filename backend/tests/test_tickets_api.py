@@ -456,6 +456,49 @@ class TicketsApiTest(unittest.TestCase):
             "The pipe is still dripping near the lower joint.",
         )
 
+    def test_ticket_history_records_the_full_rework_journey_for_each_role(
+        self,
+    ) -> None:
+        completed = self.create_completed_ticket()
+        reason = "The pipe is still dripping near the lower joint."
+        reviewed = self.client.post(
+            f"/tickets/{completed['id']}/review",
+            json={
+                "expected_version": completed["version"],
+                "decision": "request_rework",
+                "feedback": reason,
+            },
+        ).json()
+
+        resident_history = self.client.get(
+            f"/tickets/{completed['id']}/events"
+        )
+        manager_history = self.client.get(
+            f"/manager/tickets/{completed['id']}/events"
+        )
+        worker_history = self.client.get(
+            f"/worker/tickets/{completed['id']}/events"
+        )
+
+        self.assertEqual(resident_history.status_code, 200)
+        self.assertEqual(manager_history.json(), resident_history.json())
+        self.assertEqual(worker_history.json(), resident_history.json())
+        events = resident_history.json()
+        self.assertEqual(
+            [event["action"] for event in events],
+            ["create", "assign", "start", "submit_proof", "request_rework"],
+        )
+        self.assertEqual(
+            [event["ticket_version"] for event in events],
+            [1, 2, 3, 4, 5],
+        )
+        self.assertEqual(events[-1]["actor_role"], "resident")
+        self.assertEqual(events[-1]["detail"], reason)
+        worker_ticket = self.client.get("/worker/tickets").json()[0]
+        self.assertEqual(worker_ticket["status"], "assigned")
+        self.assertEqual(worker_ticket["resident_feedback"], reason)
+        self.assertEqual(reviewed["version"], 5)
+
     def test_resident_review_validates_decision_fields_and_current_version(self) -> None:
         completed = self.create_completed_ticket()
         review_url = f"/tickets/{completed['id']}/review"

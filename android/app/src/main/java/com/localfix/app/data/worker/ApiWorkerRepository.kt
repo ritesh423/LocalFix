@@ -5,6 +5,7 @@ import com.localfix.app.data.model.ServiceCategory
 import com.localfix.app.data.model.TicketStatus
 import com.localfix.app.data.model.UrgencySuggestion
 import com.localfix.app.data.remote.TicketResponse
+import com.localfix.app.data.remote.TicketEventResponse
 import com.localfix.app.data.remote.TicketCompletionPayload
 import com.localfix.app.data.remote.TicketStartPayload
 import com.localfix.app.data.remote.WorkerTicketApi
@@ -49,6 +50,9 @@ class ApiWorkerRepository(
                 )
             }
     }
+
+    override suspend fun loadJobHistory(ticketId: String): List<WorkerJobEvent> =
+        ticketApi.listWorkerTicketEvents(ticketId).map { it.toWorkerJobEvent(clock) }
 
     override suspend fun startJob(
         ticketId: String,
@@ -121,8 +125,40 @@ private fun TicketResponse.toWorkerJob(clock: Clock): WorkerJob = WorkerJob(
     completionNote = completionNote,
     partsUsed = partsUsed,
     hasCompletionPhoto = hasCompletionPhoto,
+    reworkReason = residentFeedback,
     updatedLabel = updatedAt.toUpdatedLabel(clock),
 )
+
+private fun TicketEventResponse.toWorkerJobEvent(clock: Clock) = WorkerJobEvent(
+    id = id,
+    title = action.toEventTitle(),
+    detail = detail,
+    statusLabel = toStatus.toStatusLabel(),
+    timeLabel = createdAt.toUpdatedLabel(clock),
+    ticketVersion = ticketVersion,
+)
+
+private fun String.toEventTitle(): String = when (this) {
+    "create" -> "Request created"
+    "assign" -> "Worker assigned"
+    "start" -> "Work started"
+    "submit_proof" -> "Repair submitted"
+    "confirm" -> "Repair confirmed"
+    "request_rework" -> "Resident requested more work"
+    "history_started" -> "History tracking started"
+    else -> replace('_', ' ').replaceFirstChar(Char::uppercase)
+}
+
+private fun String.toStatusLabel(): String = when (this) {
+    "open" -> "Open"
+    "assigned" -> "Ready to start"
+    "in_progress" -> "In progress"
+    "awaiting_confirmation" -> "Awaiting confirmation"
+    "completed" -> "Completed"
+    "blocked" -> "Blocked"
+    "cancelled" -> "Cancelled"
+    else -> replace('_', ' ').replaceFirstChar(Char::uppercase)
+}
 
 private fun String.toUnitLabel(): String = when (this) {
     "30000000-0000-0000-0000-000000000204" -> "Apartment A-204"

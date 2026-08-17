@@ -221,6 +221,10 @@ class SqlAlchemyTicketRepositoryTest(unittest.TestCase):
             SqlAlchemyTicketRepository(create_session_factory(second_engine))
         )
         restored = second_service.get_ticket(reviewed.id, DEMO_RESIDENT_CONTEXT)
+        events = second_service.list_resident_ticket_events(
+            reviewed.id,
+            DEMO_RESIDENT_CONTEXT,
+        )
         second_engine.dispose()
 
         self.assertIsNotNone(restored)
@@ -234,6 +238,11 @@ class SqlAlchemyTicketRepositoryTest(unittest.TestCase):
             "The repair is working properly now.",
         )
         self.assertEqual(len(evidence_storage.content_by_key), 1)
+        self.assertEqual(
+            [event.action.value for event in events],
+            ["create", "assign", "start", "submit_proof", "confirm"],
+        )
+        self.assertEqual([event.ticket_version for event in events], [1, 2, 3, 4, 5])
 
     def test_manager_assignment_migration_preserves_existing_tickets(self) -> None:
         config = self.alembic_config()
@@ -287,11 +296,25 @@ class SqlAlchemyTicketRepositoryTest(unittest.TestCase):
         index_names = {
             index["name"] for index in inspect(migrated_engine).get_indexes("tickets")
         }
+        event_index_names = {
+            index["name"]
+            for index in inspect(migrated_engine).get_indexes("ticket_events")
+        }
         with migrated_engine.connect() as connection:
             restored_title = connection.scalar(
                 text("SELECT title FROM tickets WHERE id = :id"),
                 {"id": ticket_id.hex},
             )
+            baseline_event = connection.execute(
+                text(
+                    """
+                    SELECT action, to_status, ticket_version
+                    FROM ticket_events
+                    WHERE ticket_id = :ticket_id
+                    """
+                ),
+                {"ticket_id": ticket_id.hex},
+            ).one()
         migrated_engine.dispose()
 
         self.assertIn("priority", column_names)
@@ -303,7 +326,12 @@ class SqlAlchemyTicketRepositoryTest(unittest.TestCase):
         self.assertIn("resident_feedback", column_names)
         self.assertIn("resident_reviewed_at", column_names)
         self.assertIn("ix_tickets_worker_status_updated", index_names)
+        self.assertIn("ix_ticket_events_ticket_created", event_index_names)
         self.assertEqual(restored_title, "Existing ticket")
+        self.assertEqual(
+            tuple(baseline_event),
+            ("history_started", "open", 1),
+        )
 
     def alembic_config(self) -> Config:
         config = Config(str(BACKEND_ROOT / "alembic.ini"))

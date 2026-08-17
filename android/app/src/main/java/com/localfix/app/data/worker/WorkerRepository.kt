@@ -8,6 +8,8 @@ interface WorkerRepository {
 
     suspend fun refresh()
 
+    suspend fun loadJobHistory(ticketId: String): List<WorkerJobEvent>
+
     suspend fun startJob(
         ticketId: String,
         expectedVersion: Int,

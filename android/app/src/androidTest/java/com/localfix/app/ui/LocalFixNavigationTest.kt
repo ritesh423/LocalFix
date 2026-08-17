@@ -119,10 +119,15 @@ class LocalFixNavigationTest {
         composeRule.onNodeWithText("My jobs").assertIsDisplayed()
         composeRule.onNodeWithText("Bathroom pipe is leaking").performClick()
         composeRule.onNodeWithText("Morning · 8 AM–12 PM").assertIsDisplayed()
+        composeRule.onNodeWithText(
+            "The lower pipe joint is still dripping after using the sink.",
+        ).assertIsDisplayed()
         composeRule.onNodeWithTag("worker-start-job").performClick()
 
         composeRule.onNodeWithText("Work started").assertIsDisplayed()
         composeRule.onNodeWithText("In progress").assertIsDisplayed()
+        composeRule.onNodeWithTag("worker-job-detail").performScrollToIndex(6)
+        composeRule.onNodeWithTag("worker-history").assertIsDisplayed()
     }
 
     private fun testAppContainer(): AppContainer = object : AppContainer {

@@ -10,6 +10,7 @@ import com.localfix.app.data.model.TicketStatus
 import com.localfix.app.data.model.UrgencySuggestion
 import com.localfix.app.data.worker.WorkerData
 import com.localfix.app.data.worker.WorkerJob
+import com.localfix.app.data.worker.WorkerJobEvent
 import com.localfix.app.data.worker.WorkerRepository
 import com.localfix.app.data.worker.WorkerSyncState
 import com.localfix.app.ui.components.RequestLoadUiState
@@ -50,7 +51,11 @@ class WorkerViewModel(
     }
 
     fun openJob(ticketId: String) {
-        selection.value = WorkerSelection(ticketId = ticketId)
+        selection.value = WorkerSelection(
+            ticketId = ticketId,
+            isHistoryLoading = true,
+        )
+        viewModelScope.launch { loadJobHistory(ticketId) }
     }
 
     fun startJob() {
@@ -70,6 +75,7 @@ class WorkerViewModel(
                 selection.update { current ->
                     current.copy(isStarting = false, hasJustStarted = true)
                 }
+                loadJobHistory(job.id)
             }.onFailure {
                 selection.update { current ->
                     current.copy(
@@ -172,6 +178,7 @@ class WorkerViewModel(
                         hasJustSubmittedCompletion = true,
                     )
                 }
+                loadJobHistory(job.id)
             }.onFailure {
                 selection.update { state ->
                     state.copy(
@@ -182,6 +189,35 @@ class WorkerViewModel(
                 }
             }
         }
+    }
+
+    private suspend fun loadJobHistory(ticketId: String) {
+        runCatching { repository.loadJobHistory(ticketId) }
+            .onSuccess { events ->
+                selection.update { current ->
+                    if (current.ticketId == ticketId) {
+                        current.copy(
+                            history = events,
+                            isHistoryLoading = false,
+                            historyError = null,
+                        )
+                    } else {
+                        current
+                    }
+                }
+            }
+            .onFailure {
+                selection.update { current ->
+                    if (current.ticketId == ticketId) {
+                        current.copy(
+                            isHistoryLoading = false,
+                            historyError = "Couldn't load this job's activity.",
+                        )
+                    } else {
+                        current
+                    }
+                }
+            }
     }
 
     companion object {
@@ -206,6 +242,9 @@ private data class WorkerSelection(
     val isSubmittingCompletion: Boolean = false,
     val completionSubmissionError: String? = null,
     val hasJustSubmittedCompletion: Boolean = false,
+    val history: List<WorkerJobEvent> = emptyList(),
+    val isHistoryLoading: Boolean = false,
+    val historyError: String? = null,
 )
 
 private fun createWorkerUiState(
@@ -241,6 +280,9 @@ private fun createWorkerUiState(
             isSubmittingCompletion = selection.isSubmittingCompletion,
             completionSubmissionError = selection.completionSubmissionError,
             hasJustSubmittedCompletion = selection.hasJustSubmittedCompletion,
+            history = selection.history.map(WorkerJobEvent::toUiState),
+            isHistoryLoading = selection.isHistoryLoading,
+            historyError = selection.historyError,
         ),
     )
 }
@@ -291,6 +333,16 @@ private fun WorkerJob.toDetail() = WorkerJobDetail(
     completionNote = completionNote,
     partsUsed = partsUsed,
     hasCompletionPhoto = hasCompletionPhoto,
+    reworkReason = reworkReason,
+)
+
+private fun WorkerJobEvent.toUiState() = WorkerHistoryItem(
+    id = id,
+    title = title,
+    detail = detail,
+    statusLabel = statusLabel,
+    timeLabel = timeLabel,
+    ticketVersion = ticketVersion,
 )
 
 private fun String.toPartsList(): List<String> = split(',')

@@ -16,6 +16,7 @@ from app.domain.tickets import (
     ResidentReviewDecision,
     ServiceCategory,
     Ticket,
+    TicketEvent,
     TicketPriority,
     UrgencySuggestion,
     Worker,
@@ -138,7 +139,18 @@ class TicketService:
             created_at=now,
             updated_at=now,
         )
-        ticket, was_created = self._repository.create(candidate)
+        ticket, was_created = self._repository.create(
+            candidate,
+            self._event(
+                ticket=candidate,
+                actor_role=UserRole.RESIDENT,
+                actor_id=resident.user_id,
+                action=TicketAction.CREATE,
+                from_status=None,
+                detail="Maintenance request created.",
+                created_at=now,
+            ),
+        )
         return CreateTicketResult(ticket=ticket, was_created=was_created)
 
     def list_tickets(self, resident: ResidentContext) -> list[Ticket]:
@@ -158,8 +170,27 @@ class TicketService:
             resident_id=resident.user_id,
         )
 
+    def list_resident_ticket_events(
+        self,
+        ticket_id: UUID,
+        resident: ResidentContext,
+    ) -> list[TicketEvent]:
+        if self.get_ticket(ticket_id, resident) is None:
+            raise TicketNotFoundError
+        return self._repository.list_events(ticket_id)
+
     def list_manager_tickets(self, manager: ManagerContext) -> list[Ticket]:
         return self._repository.list_for_property(manager.property_id)
+
+    def list_manager_ticket_events(
+        self,
+        ticket_id: UUID,
+        manager: ManagerContext,
+    ) -> list[TicketEvent]:
+        ticket = self._repository.get_for_property(ticket_id, manager.property_id)
+        if ticket is None:
+            raise TicketNotFoundError
+        return self._repository.list_events(ticket_id)
 
     def list_workers(self, manager: ManagerContext) -> list[Worker]:
         return sorted(
@@ -176,6 +207,20 @@ class TicketService:
             property_id=worker.property_id,
             worker_id=worker.worker_id,
         )
+
+    def list_worker_ticket_events(
+        self,
+        ticket_id: UUID,
+        worker: WorkerContext,
+    ) -> list[TicketEvent]:
+        ticket = self._repository.get_for_worker(
+            ticket_id=ticket_id,
+            property_id=worker.property_id,
+            worker_id=worker.worker_id,
+        )
+        if ticket is None:
+            raise TicketNotFoundError
+        return self._repository.list_events(ticket_id)
 
     def start_ticket(
         self,
@@ -206,6 +251,15 @@ class TicketService:
         was_updated = self._repository.update_if_version(
             started_ticket,
             expected_version=command.expected_version,
+            event=self._event(
+                ticket=started_ticket,
+                actor_role=UserRole.WORKER,
+                actor_id=worker.worker_id,
+                action=TicketAction.START,
+                from_status=ticket.status,
+                detail="Worker started the repair.",
+                created_at=started_ticket.updated_at,
+            ),
         )
         if not was_updated:
             raise TicketVersionConflictError
@@ -258,6 +312,15 @@ class TicketService:
             was_updated = self._repository.update_if_version(
                 completed_ticket,
                 expected_version=command.expected_version,
+                event=self._event(
+                    ticket=completed_ticket,
+                    actor_role=UserRole.WORKER,
+                    actor_id=worker.worker_id,
+                    action=TicketAction.SUBMIT_PROOF,
+                    from_status=ticket.status,
+                    detail=note,
+                    created_at=submitted_at,
+                ),
             )
         except Exception:
             self._evidence_storage.delete(photo_key)
@@ -338,6 +401,18 @@ class TicketService:
         was_updated = self._repository.update_if_version(
             reviewed_ticket,
             expected_version=command.expected_version,
+            event=self._event(
+                ticket=reviewed_ticket,
+                actor_role=UserRole.RESIDENT,
+                actor_id=resident.user_id,
+                action=action,
+                from_status=ticket.status,
+                detail=feedback
+                or (
+                    f"Resident confirmed the repair with a {command.rating}-star rating."
+                ),
+                created_at=reviewed_at,
+            ),
         )
         if not was_updated:
             raise TicketVersionConflictError
@@ -411,7 +486,41 @@ class TicketService:
         was_updated = self._repository.update_if_version(
             assigned_ticket,
             expected_version=command.expected_version,
+            event=self._event(
+                ticket=assigned_ticket,
+                actor_role=UserRole.MANAGER,
+                actor_id=manager.user_id,
+                action=TicketAction.ASSIGN,
+                from_status=ticket.status,
+                detail=(
+                    f"Assigned to {worker.name} with {command.priority.value} priority."
+                ),
+                created_at=assigned_ticket.updated_at,
+            ),
         )
         if not was_updated:
             raise TicketVersionConflictError
         return assigned_ticket
+
+    @staticmethod
+    def _event(
+        ticket: Ticket,
+        actor_role: UserRole,
+        actor_id: UUID | None,
+        action: TicketAction,
+        from_status: TicketStatus | None,
+        detail: str | None,
+        created_at: datetime,
+    ) -> TicketEvent:
+        return TicketEvent(
+            id=uuid4(),
+            ticket_id=ticket.id,
+            actor_role=actor_role,
+            actor_id=actor_id,
+            action=action,
+            from_status=from_status,
+            to_status=ticket.status,
+            ticket_version=ticket.version,
+            detail=detail,
+            created_at=created_at,
+        )

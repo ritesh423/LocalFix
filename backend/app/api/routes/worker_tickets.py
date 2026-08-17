@@ -4,7 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 
 from app.api.dependencies import TicketServiceDependency, WorkerContextDependency
-from app.api.schemas import TicketResponse, TicketStartRequest
+from app.api.schemas import TicketEventResponse, TicketResponse, TicketStartRequest
 from app.domain.ticket_workflow import TransitionNotAllowed
 from app.services.tickets import (
     CompletionPhoto,
@@ -26,6 +26,25 @@ def list_worker_tickets(
         TicketResponse.from_domain(ticket)
         for ticket in service.list_worker_tickets(worker)
     ]
+
+
+@router.get(
+    "/tickets/{ticket_id}/events",
+    response_model=list[TicketEventResponse],
+)
+def list_worker_ticket_events(
+    ticket_id: UUID,
+    service: TicketServiceDependency,
+    worker: WorkerContextDependency,
+) -> list[TicketEventResponse]:
+    try:
+        events = service.list_worker_ticket_events(ticket_id, worker)
+    except TicketNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "ticket_not_found", "message": "Ticket not found."},
+        ) from error
+    return [TicketEventResponse.from_domain(event) for event in events]
 
 
 @router.post("/tickets/{ticket_id}/start", response_model=TicketResponse)

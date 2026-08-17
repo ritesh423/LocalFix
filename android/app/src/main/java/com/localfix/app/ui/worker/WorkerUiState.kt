@@ -40,6 +40,18 @@ data class WorkerJobDetailUiState(
     val isSubmittingCompletion: Boolean = false,
     val completionSubmissionError: String? = null,
     val hasJustSubmittedCompletion: Boolean = false,
+    val history: List<WorkerHistoryItem> = emptyList(),
+    val isHistoryLoading: Boolean = false,
+    val historyError: String? = null,
+)
+
+data class WorkerHistoryItem(
+    val id: String,
+    val title: String,
+    val detail: String?,
+    val statusLabel: String,
+    val timeLabel: String,
+    val ticketVersion: Int,
 )
 
 data class WorkerCompletionDraft(
@@ -72,4 +84,5 @@ data class WorkerJobDetail(
     val completionNote: String?,
     val partsUsed: List<String>,
     val hasCompletionPhoto: Boolean,
+    val reworkReason: String?,
 )

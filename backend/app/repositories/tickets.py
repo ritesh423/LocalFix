@@ -3,11 +3,15 @@ from threading import Lock
 from typing import Protocol
 from uuid import UUID
 
-from app.domain.tickets import Ticket
+from app.domain.tickets import Ticket, TicketEvent
 
 
 class TicketRepository(Protocol):
-    def create(self, ticket: Ticket) -> tuple[Ticket, bool]: ...
+    def create(
+        self,
+        ticket: Ticket,
+        event: TicketEvent,
+    ) -> tuple[Ticket, bool]: ...
 
     def list_for_resident(
         self,
@@ -47,7 +51,10 @@ class TicketRepository(Protocol):
         self,
         ticket: Ticket,
         expected_version: int,
+        event: TicketEvent,
     ) -> bool: ...
+
+    def list_events(self, ticket_id: UUID) -> list[TicketEvent]: ...
 
 
 class InMemoryTicketRepository:
@@ -56,9 +63,14 @@ class InMemoryTicketRepository:
         self._ticket_ids_by_client_request = {
             ticket.client_request_id: ticket.id for ticket in tickets
         }
+        self._events_by_ticket: dict[UUID, list[TicketEvent]] = {}
         self._lock = Lock()
 
-    def create(self, ticket: Ticket) -> tuple[Ticket, bool]:
+    def create(
+        self,
+        ticket: Ticket,
+        event: TicketEvent,
+    ) -> tuple[Ticket, bool]:
         with self._lock:
             existing_id = self._ticket_ids_by_client_request.get(
                 ticket.client_request_id
@@ -68,6 +80,7 @@ class InMemoryTicketRepository:
 
             self._tickets[ticket.id] = ticket
             self._ticket_ids_by_client_request[ticket.client_request_id] = ticket.id
+            self._events_by_ticket[ticket.id] = [event]
             return ticket, True
 
     def list_for_resident(
@@ -155,10 +168,15 @@ class InMemoryTicketRepository:
         self,
         ticket: Ticket,
         expected_version: int,
+        event: TicketEvent,
     ) -> bool:
         with self._lock:
             current = self._tickets.get(ticket.id)
             if current is None or current.version != expected_version:
                 return False
             self._tickets[ticket.id] = ticket
+            self._events_by_ticket.setdefault(ticket.id, []).append(event)
             return True
+
+    def list_events(self, ticket_id: UUID) -> list[TicketEvent]:
+        return list(self._events_by_ticket.get(ticket_id, ()))

@@ -1,7 +1,16 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import JSON, DateTime, Index, Integer, String, UniqueConstraint, Uuid
+from sqlalchemy import (
+    JSON,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+    Uuid,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -20,6 +29,12 @@ class TicketRecord(Base):
         Index(
             "ix_tickets_manager_queue",
             "property_id",
+            "status",
+            "updated_at",
+        ),
+        Index(
+            "ix_tickets_worker_status_updated",
+            "assigned_worker_id",
             "status",
             "updated_at",
         ),
@@ -59,3 +74,29 @@ class TicketRecord(Base):
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class TicketEventRecord(Base):
+    __tablename__ = "ticket_events"
+    __table_args__ = (
+        Index(
+            "ix_ticket_events_ticket_created",
+            "ticket_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
+    ticket_id: Mapped[UUID] = mapped_column(
+        Uuid(),
+        ForeignKey("tickets.id"),
+        nullable=False,
+    )
+    actor_role: Mapped[str] = mapped_column(String(32))
+    actor_id: Mapped[UUID | None] = mapped_column(Uuid(), nullable=True)
+    action: Mapped[str] = mapped_column(String(32))
+    from_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    to_status: Mapped[str] = mapped_column(String(32))
+    ticket_version: Mapped[int] = mapped_column(Integer)
+    detail: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

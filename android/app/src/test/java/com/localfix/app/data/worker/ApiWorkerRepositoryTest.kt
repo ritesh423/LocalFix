@@ -3,6 +3,7 @@ package com.localfix.app.data.worker
 import com.localfix.app.data.model.ServiceCategory
 import com.localfix.app.data.model.TicketStatus
 import com.localfix.app.data.remote.TicketResponse
+import com.localfix.app.data.remote.TicketEventResponse
 import com.localfix.app.data.remote.TicketCompletionPayload
 import com.localfix.app.data.remote.TicketStartPayload
 import com.localfix.app.data.remote.WorkerTicketApi
@@ -95,6 +96,22 @@ class ApiWorkerRepositoryTest {
         assertTrue(repository.workerData.value.jobs.isEmpty())
     }
 
+    @Test
+    fun reworkReasonAndImmutableHistoryAreMappedForTheWorker() = runTest {
+        val repository = ApiWorkerRepository(FakeWorkerApi(), clock)
+        repository.refresh()
+
+        val history = repository.loadJobHistory(TICKET_ID)
+
+        assertEquals(
+            "The lower pipe joint is still dripping.",
+            repository.workerData.value.jobs.single().reworkReason,
+        )
+        assertEquals("Resident requested more work", history.single().title)
+        assertEquals("Ready to start", history.single().statusLabel)
+        assertEquals(5, history.single().ticketVersion)
+    }
+
     private class FakeWorkerApi(
         private val listFailure: Throwable? = null,
     ) : WorkerTicketApi {
@@ -105,6 +122,22 @@ class ApiWorkerRepositoryTest {
             listFailure?.let { throw it }
             return listOf(ticketResponse())
         }
+
+        override suspend fun listWorkerTicketEvents(
+            ticketId: String,
+        ): List<TicketEventResponse> = listOf(
+            TicketEventResponse(
+                id = "70000000-0000-0000-0000-000000000001",
+                ticketId = ticketId,
+                actorRole = "resident",
+                action = "request_rework",
+                fromStatus = "awaiting_confirmation",
+                toStatus = "assigned",
+                ticketVersion = 5,
+                detail = "The lower pipe joint is still dripping.",
+                createdAt = "2026-08-16T10:15:00Z",
+            ),
+        )
 
         override suspend fun startTicket(
             ticketId: String,
@@ -156,6 +189,7 @@ class ApiWorkerRepositoryTest {
             version = 2,
             assignedWorkerId = "40000000-0000-0000-0000-000000000001",
             assignedWorker = "Arun Kumar",
+            residentFeedback = "The lower pipe joint is still dripping.",
             createdAt = "2026-08-16T10:00:00Z",
             updatedAt = "2026-08-16T10:00:00Z",
         )

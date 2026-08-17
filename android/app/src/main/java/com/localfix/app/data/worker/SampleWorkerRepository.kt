@@ -11,11 +11,58 @@ import kotlinx.coroutines.flow.update
 
 class SampleWorkerRepository : WorkerRepository {
     private val mutableData = MutableStateFlow(sampleWorkerData())
+    private val historyByTicket = mutableMapOf(
+        "90000000-0000-0000-0000-000000000001" to mutableListOf(
+            WorkerJobEvent(
+                id = "event-1",
+                title = "Request created",
+                detail = "Maintenance request created.",
+                statusLabel = "Open",
+                timeLabel = "Updated 2 days ago",
+                ticketVersion = 1,
+            ),
+            WorkerJobEvent(
+                id = "event-2",
+                title = "Worker assigned",
+                detail = "Assigned to Arun Kumar with soon priority.",
+                statusLabel = "Ready to start",
+                timeLabel = "Updated 1 day ago",
+                ticketVersion = 2,
+            ),
+            WorkerJobEvent(
+                id = "event-3",
+                title = "Work started",
+                detail = "Worker started the repair.",
+                statusLabel = "In progress",
+                timeLabel = "Updated 1 day ago",
+                ticketVersion = 3,
+            ),
+            WorkerJobEvent(
+                id = "event-4",
+                title = "Repair submitted",
+                detail = "Replaced the lower pipe fitting and tested the sink.",
+                statusLabel = "Awaiting confirmation",
+                timeLabel = "Updated 2 hr ago",
+                ticketVersion = 4,
+            ),
+            WorkerJobEvent(
+                id = "event-5",
+                title = "Resident requested more work",
+                detail = "The lower pipe joint is still dripping after using the sink.",
+                statusLabel = "Ready to start",
+                timeLabel = "Updated 12 min ago",
+                ticketVersion = 5,
+            ),
+        ),
+    )
 
     override val workerData: StateFlow<WorkerData> = mutableData.asStateFlow()
     override val syncState = MutableStateFlow<WorkerSyncState>(WorkerSyncState.Ready)
 
     override suspend fun refresh() = Unit
+
+    override suspend fun loadJobHistory(ticketId: String): List<WorkerJobEvent> =
+        historyByTicket[ticketId]?.toList().orEmpty()
 
     override suspend fun startJob(ticketId: String, expectedVersion: Int): WorkerJob {
         val current = requireNotNull(mutableData.value.jobs.find { it.id == ticketId })
@@ -33,6 +80,16 @@ class SampleWorkerRepository : WorkerRepository {
                 },
             )
         }
+        historyByTicket.getOrPut(ticketId, ::mutableListOf).add(
+            WorkerJobEvent(
+                id = "event-start-${started.version}",
+                title = "Work started",
+                detail = "Worker started the repair.",
+                statusLabel = "In progress",
+                timeLabel = "Updated just now",
+                ticketVersion = started.version,
+            ),
+        )
         return started
     }
 
@@ -58,6 +115,16 @@ class SampleWorkerRepository : WorkerRepository {
         mutableData.update { data ->
             data.copy(jobs = data.jobs.map { if (it.id == ticketId) completed else it })
         }
+        historyByTicket.getOrPut(ticketId, ::mutableListOf).add(
+            WorkerJobEvent(
+                id = "event-complete-${completed.version}",
+                title = "Repair submitted",
+                detail = completionNote,
+                statusLabel = "Awaiting confirmation",
+                timeLabel = "Updated just now",
+                ticketVersion = completed.version,
+            ),
+        )
         return completed
     }
 }
@@ -77,10 +144,11 @@ fun sampleWorkerData() = WorkerData(
             priorityLabel = "Soon",
             accessWindow = AccessWindow.MORNING,
             status = TicketStatus.ASSIGNED,
-            version = 2,
+            version = 5,
             completionNote = null,
             partsUsed = emptyList(),
             hasCompletionPhoto = false,
+            reworkReason = "The lower pipe joint is still dripping after using the sink.",
             updatedLabel = "Updated 12 min ago",
         ),
         WorkerJob(
@@ -98,6 +166,7 @@ fun sampleWorkerData() = WorkerData(
             completionNote = null,
             partsUsed = emptyList(),
             hasCompletionPhoto = false,
+            reworkReason = null,
             updatedLabel = "Updated 45 min ago",
         ),
     ),

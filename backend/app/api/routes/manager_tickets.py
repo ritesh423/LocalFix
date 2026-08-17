@@ -3,7 +3,12 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, status
 
 from app.api.dependencies import ManagerContextDependency, TicketServiceDependency
-from app.api.schemas import TicketAssignmentRequest, TicketResponse, WorkerResponse
+from app.api.schemas import (
+    TicketAssignmentRequest,
+    TicketEventResponse,
+    TicketResponse,
+    WorkerResponse,
+)
 from app.domain.ticket_workflow import TransitionNotAllowed
 from app.services.tickets import (
     TicketNotFoundError,
@@ -33,6 +38,25 @@ def list_workers(
     return [
         WorkerResponse.from_domain(worker) for worker in service.list_workers(manager)
     ]
+
+
+@router.get(
+    "/tickets/{ticket_id}/events",
+    response_model=list[TicketEventResponse],
+)
+def list_manager_ticket_events(
+    ticket_id: UUID,
+    service: TicketServiceDependency,
+    manager: ManagerContextDependency,
+) -> list[TicketEventResponse]:
+    try:
+        events = service.list_manager_ticket_events(ticket_id, manager)
+    except TicketNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "ticket_not_found", "message": "Ticket not found."},
+        ) from error
+    return [TicketEventResponse.from_domain(event) for event in events]
 
 
 @router.post("/tickets/{ticket_id}/assignment", response_model=TicketResponse)
