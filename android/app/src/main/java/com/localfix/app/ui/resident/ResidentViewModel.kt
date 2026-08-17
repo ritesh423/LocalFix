@@ -7,6 +7,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.localfix.app.data.draft.RequestDraftRepository
 import com.localfix.app.data.model.ResidentData
+import com.localfix.app.data.model.RequestDeliveryState
 import com.localfix.app.data.model.MaintenanceRequest
 import com.localfix.app.data.model.NewMaintenanceRequest
 import com.localfix.app.data.model.SavedRequestDraft
@@ -418,7 +419,8 @@ private fun createResidentUiState(
                     id = request.id,
                     reference = request.reference,
                     title = request.title,
-                    statusLabel = request.status.label,
+                    statusLabel = request.displayStatusLabel,
+                    statusTone = request.displayStatusTone,
                     assignedWorker = request.assignedWorker,
                     updatedLabel = request.updatedLabel,
                 )
@@ -442,8 +444,8 @@ private fun createResidentUiState(
                     reference = request.reference,
                     title = request.title,
                     category = request.category.label,
-                    statusTone = request.status.tone,
-                    statusLabel = request.status.label,
+                    statusTone = request.displayStatusTone,
+                    statusLabel = request.displayStatusLabel,
                     updatedLabel = request.updatedLabel,
                 )
             },
@@ -475,7 +477,7 @@ private fun RequestSyncState.toLoadUiState(
     } else {
         RequestLoadUiState.Empty
     }
-    is RequestSyncState.Error -> if (hasPreviousResult) {
+    is RequestSyncState.Error -> if (hasPreviousResult || hasVisibleRequests) {
         RequestLoadUiState.Stale(message)
     } else {
         RequestLoadUiState.Failed(message)
@@ -491,8 +493,8 @@ private fun MaintenanceRequest.toDetailUiState(
         title = title,
         description = description,
         categoryLabel = category.label,
-        statusLabel = status.label,
-        statusTone = status.tone,
+        statusLabel = displayStatusLabel,
+        statusTone = displayStatusTone,
         urgencyLabel = urgencySuggestion.label,
         accessWindowLabel = accessWindow.label,
         assignedWorker = assignedWorker,
@@ -533,7 +535,25 @@ private fun ResidentReviewState.toUiState() = ResidentReviewUiState(
 )
 
 private val MaintenanceRequest.reference: String
-    get() = if (id.startsWith("LF-")) id else "LF-${id.take(8).uppercase()}"
+    get() = when {
+        id.startsWith("LF-") -> id
+        deliveryState != RequestDeliveryState.SYNCED -> "LOCAL-${id.take(8).uppercase()}"
+        else -> "LF-${id.take(8).uppercase()}"
+    }
+
+private val MaintenanceRequest.displayStatusLabel: String
+    get() = when (deliveryState) {
+        RequestDeliveryState.PENDING -> "Waiting to send"
+        RequestDeliveryState.FAILED -> "Send failed"
+        RequestDeliveryState.SYNCED -> status.label
+    }
+
+private val MaintenanceRequest.displayStatusTone: RequestStatusTone
+    get() = when (deliveryState) {
+        RequestDeliveryState.PENDING -> RequestStatusTone.NEUTRAL
+        RequestDeliveryState.FAILED -> RequestStatusTone.ATTENTION
+        RequestDeliveryState.SYNCED -> status.tone
+    }
 
 private val terminalStatuses = setOf(
     TicketStatus.COMPLETED,

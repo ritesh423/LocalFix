@@ -6,13 +6,10 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.WindowCompat
-import com.localfix.app.data.DefaultAppContainer
 import com.localfix.app.ui.LocalFixApp
 
 class MainActivity : ComponentActivity() {
-    private val appContainer by lazy {
-        DefaultAppContainer(applicationContext)
-    }
+    private val appContainer by lazy { (application as LocalFixApplication).appContainer }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

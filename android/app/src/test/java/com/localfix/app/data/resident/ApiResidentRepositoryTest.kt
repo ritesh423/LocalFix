@@ -2,10 +2,12 @@ package com.localfix.app.data.resident
 
 import com.localfix.app.data.model.AccessWindow
 import com.localfix.app.data.model.NewMaintenanceRequest
+import com.localfix.app.data.model.RequestDeliveryState
 import com.localfix.app.data.model.ServiceCategory
 import com.localfix.app.data.model.TicketStatus
 import com.localfix.app.data.model.UrgencySuggestion
-import com.localfix.app.data.local.ResidentTicketDao
+import com.localfix.app.data.local.PendingResidentRequestEntity
+import com.localfix.app.data.local.ResidentRequestStore
 import com.localfix.app.data.local.ResidentTicketEntity
 import com.localfix.app.data.remote.TicketApi
 import com.localfix.app.data.remote.TicketCreatePayload
@@ -36,7 +38,13 @@ class ApiResidentRepositoryTest {
         val ticketApi = FakeTicketApi(
             tickets = mutableListOf(ticketResponse()),
         )
-        val repository = ApiResidentRepository(ticketApi, FakeResidentTicketDao(), backgroundScope, clock)
+        val repository = ApiResidentRepository(
+            ticketApi,
+            FakeResidentRequestStore(),
+            FakeSyncScheduler(),
+            backgroundScope,
+            clock,
+        )
 
         repository.refreshRequests()
         runCurrent()
@@ -51,9 +59,17 @@ class ApiResidentRepositoryTest {
     }
 
     @Test
-    fun createSendsStableClientRequestIdAndUpdatesLocalState() = runTest {
+    fun createQueuesStableClientRequestIdAndUpdatesLocalState() = runTest {
         val ticketApi = FakeTicketApi()
-        val repository = ApiResidentRepository(ticketApi, FakeResidentTicketDao(), backgroundScope, clock)
+        val store = FakeResidentRequestStore()
+        val scheduler = FakeSyncScheduler()
+        val repository = ApiResidentRepository(
+            ticketApi,
+            store,
+            scheduler,
+            backgroundScope,
+            clock,
+        )
 
         val requestId = repository.createRequest(
             NewMaintenanceRequest(
@@ -67,19 +83,22 @@ class ApiResidentRepositoryTest {
         )
         runCurrent()
 
-        assertEquals("90000000-0000-0000-0000-000000000001", requestId)
-        assertEquals(
-            "50000000-0000-0000-0000-000000000004",
-            ticketApi.lastCreatePayload?.clientRequestId,
-        )
+        assertEquals("50000000-0000-0000-0000-000000000004", requestId)
+        assertEquals(null, ticketApi.lastCreatePayload)
+        assertEquals(listOf(requestId), scheduler.scheduledIds)
         assertEquals("Kitchen tap is leaking", repository.residentData.value.requests.single().title)
+        assertEquals(
+            RequestDeliveryState.PENDING,
+            repository.residentData.value.requests.single().deliveryState,
+        )
     }
 
     @Test
     fun connectionFailureBecomesVisibleRepositoryState() = runTest {
         val repository = ApiResidentRepository(
             ticketApi = FakeTicketApi(listFailure = IOException("offline")),
-            residentTicketDao = FakeResidentTicketDao(),
+            residentRequestStore = FakeResidentRequestStore(),
+            pendingRequestSyncScheduler = FakeSyncScheduler(),
             applicationScope = backgroundScope,
             clock = clock,
         )
@@ -96,7 +115,13 @@ class ApiResidentRepositoryTest {
         val ticketApi = FakeTicketApi(
             tickets = mutableListOf(ticketResponse()),
         )
-        val repository = ApiResidentRepository(ticketApi, FakeResidentTicketDao(), backgroundScope, clock)
+        val repository = ApiResidentRepository(
+            ticketApi,
+            FakeResidentRequestStore(),
+            FakeSyncScheduler(),
+            backgroundScope,
+            clock,
+        )
         repository.refreshRequests()
         runCurrent()
         ticketApi.listFailure = IOException("offline")
@@ -121,7 +146,13 @@ class ApiResidentRepositoryTest {
                 ),
             ),
         )
-        val repository = ApiResidentRepository(ticketApi, FakeResidentTicketDao(), backgroundScope, clock)
+        val repository = ApiResidentRepository(
+            ticketApi,
+            FakeResidentRequestStore(),
+            FakeSyncScheduler(),
+            backgroundScope,
+            clock,
+        )
 
         repository.refreshRequests()
         runCurrent()
@@ -143,7 +174,13 @@ class ApiResidentRepositoryTest {
                 ticketResponse().copy(status = "awaiting_confirmation", version = 4),
             ),
         )
-        val repository = ApiResidentRepository(ticketApi, FakeResidentTicketDao(), backgroundScope, clock)
+        val repository = ApiResidentRepository(
+            ticketApi,
+            FakeResidentRequestStore(),
+            FakeSyncScheduler(),
+            backgroundScope,
+            clock,
+        )
         repository.refreshRequests()
         runCurrent()
 
@@ -167,10 +204,11 @@ class ApiResidentRepositoryTest {
     @Test
     fun cachedTicketsAreShownWhenARefreshFailsAfterRepositoryRecreation() = runTest {
         val cachedTicket = ticketEntity(title = "Cached plumbing request")
-        val ticketDao = FakeResidentTicketDao(listOf(cachedTicket))
+        val store = FakeResidentRequestStore(initialTickets = listOf(cachedTicket))
         val repository = ApiResidentRepository(
             ticketApi = FakeTicketApi(listFailure = IOException("offline")),
-            residentTicketDao = ticketDao,
+            residentRequestStore = store,
+            pendingRequestSyncScheduler = FakeSyncScheduler(),
             applicationScope = backgroundScope,
             clock = clock,
         )
@@ -226,27 +264,81 @@ class ApiResidentRepositoryTest {
         updatedAt = "2026-08-12T10:00:00Z",
     )
 
-    private class FakeResidentTicketDao(
+    private class FakeResidentRequestStore(
         initialTickets: List<ResidentTicketEntity> = emptyList(),
-    ) : ResidentTicketDao {
+        initialPendingRequests: List<PendingResidentRequestEntity> = emptyList(),
+    ) : ResidentRequestStore {
         private val tickets = MutableStateFlow(initialTickets.sortedByDescending { it.updatedAt })
+        private val pendingRequests = MutableStateFlow(initialPendingRequests)
 
         override fun observeTickets(): Flow<List<ResidentTicketEntity>> = tickets
 
-        override suspend fun countTickets(): Int = tickets.value.size
+        override fun observePendingRequests(): Flow<List<PendingResidentRequestEntity>> =
+            pendingRequests
 
-        override suspend fun upsertTicket(ticket: ResidentTicketEntity) {
-            upsertTickets(listOf(ticket))
+        override suspend fun hasLocalRequests(): Boolean =
+            tickets.value.isNotEmpty() || pendingRequests.value.isNotEmpty()
+
+        override suspend fun getPendingRequest(
+            clientRequestId: String,
+        ): PendingResidentRequestEntity? = pendingRequests.value.find {
+            it.clientRequestId == clientRequestId
         }
 
-        override suspend fun upsertTickets(tickets: List<ResidentTicketEntity>) {
-            val incomingById = tickets.associateBy(ResidentTicketEntity::id)
-            this.tickets.value = (this.tickets.value.filterNot { it.id in incomingById } + tickets)
+        override suspend fun getRetryableRequestIds(): List<String> = pendingRequests.value
+            .filter { it.deliveryState == RequestDeliveryState.PENDING }
+            .map(PendingResidentRequestEntity::clientRequestId)
+
+        override suspend fun queueRequest(request: PendingResidentRequestEntity) {
+            pendingRequests.value = listOf(request) + pendingRequests.value.filterNot {
+                it.clientRequestId == request.clientRequestId
+            }
+        }
+
+        override suspend fun markRequestFailed(clientRequestId: String, message: String) {
+            pendingRequests.value = pendingRequests.value.map {
+                if (it.clientRequestId == clientRequestId) {
+                    it.copy(
+                        deliveryState = RequestDeliveryState.FAILED,
+                        failureMessage = message,
+                    )
+                } else {
+                    it
+                }
+            }
+        }
+
+        override suspend fun upsertTicket(ticket: ResidentTicketEntity) {
+            tickets.value = (tickets.value.filterNot { it.id == ticket.id } + ticket)
                 .sortedByDescending { it.updatedAt }
         }
 
-        override suspend fun deleteAllTickets() {
-            tickets.value = emptyList()
+        override suspend fun completePendingRequest(
+            clientRequestId: String,
+            ticket: ResidentTicketEntity,
+        ) {
+            upsertTicket(ticket)
+            pendingRequests.value = pendingRequests.value.filterNot {
+                it.clientRequestId == clientRequestId
+            }
+        }
+
+        override suspend fun replaceServerSnapshot(
+            tickets: List<ResidentTicketEntity>,
+            acknowledgedClientRequestIds: List<String>,
+        ) {
+            this.tickets.value = tickets.sortedByDescending { it.updatedAt }
+            pendingRequests.value = pendingRequests.value.filterNot {
+                it.clientRequestId in acknowledgedClientRequestIds
+            }
+        }
+    }
+
+    private class FakeSyncScheduler : PendingRequestSyncScheduler {
+        val scheduledIds = mutableListOf<String>()
+
+        override fun schedule(clientRequestId: String) {
+            scheduledIds += clientRequestId
         }
     }
 

@@ -31,7 +31,14 @@ data class MaintenanceRequest(
     val completionPhotoUrl: String? = null,
     val residentRating: Int? = null,
     val residentFeedback: String? = null,
+    val deliveryState: RequestDeliveryState = RequestDeliveryState.SYNCED,
 )
+
+enum class RequestDeliveryState {
+    SYNCED,
+    PENDING,
+    FAILED,
+}
 
 data class NewMaintenanceRequest(
     val clientRequestId: String,

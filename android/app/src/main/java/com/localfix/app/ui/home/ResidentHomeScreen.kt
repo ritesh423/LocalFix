@@ -40,7 +40,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.localfix.app.ui.theme.LocalFixRadius
@@ -49,6 +48,7 @@ import com.localfix.app.ui.theme.LocalFixTheme
 import com.localfix.app.ui.components.RequestLoadUiState
 import com.localfix.app.ui.components.RequestStatePanel
 import com.localfix.app.ui.components.RequestSyncNotice
+import com.localfix.app.ui.components.RequestStatusBadge
 
 @Composable
 fun ResidentHomeScreen(
@@ -405,18 +405,10 @@ private fun ActiveRequestCard(
     ) {
         Column(modifier = Modifier.padding(LocalFixSpacing.medium)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(
-                    color = LocalFixTheme.statusColors.activeContainer,
-                    shape = RoundedCornerShape(LocalFixRadius.small),
-                ) {
-                    Text(
-                        text = request.statusLabel,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                        color = LocalFixTheme.statusColors.onActiveContainer,
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
+                RequestStatusBadge(
+                    label = request.statusLabel,
+                    tone = request.statusTone,
+                )
                 Spacer(modifier = Modifier.weight(1f))
                 Text(
                     text = request.reference,

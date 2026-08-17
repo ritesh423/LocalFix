@@ -117,4 +117,43 @@ class LocalFixDatabaseMigrationTest {
             assertEquals(0, cursor.getInt(0))
         }
     }
+
+    @Test
+    fun migrationFromFourToFiveKeepsTicketsAndAddsPendingQueue() {
+        val databaseName = "localfix-migration-four-five-test.db"
+        migrationHelper.createDatabase(databaseName, 4).apply {
+            execSQL(
+                """
+                INSERT INTO resident_tickets
+                    (id, propertyId, unitId, residentId, title, description,
+                     category, status, urgencySuggestion, accessWindow,
+                     assignedWorker, version, completionNote, partsUsed,
+                     hasCompletionPhoto, residentRating, residentFeedback,
+                     createdAt, updatedAt)
+                VALUES
+                    ('90000000-0000-0000-0000-000000000001', 'property', 'unit',
+                     'resident', 'Leaking tap', 'Water is dripping below the sink.',
+                     'PLUMBING', 'OPEN', 'SOON', 'MORNING', NULL, 1, NULL, '[]',
+                     0, NULL, NULL, '2026-08-17T10:00:00Z', '2026-08-17T10:00:00Z')
+                """.trimIndent(),
+            )
+            close()
+        }
+
+        val migratedDatabase = migrationHelper.runMigrationsAndValidate(
+            databaseName,
+            5,
+            true,
+            MIGRATION_4_5,
+        )
+
+        migratedDatabase.query("SELECT title FROM resident_tickets").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("Leaking tap", cursor.getString(0))
+        }
+        migratedDatabase.query("SELECT COUNT(*) FROM pending_resident_requests").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(0, cursor.getInt(0))
+        }
+    }
 }

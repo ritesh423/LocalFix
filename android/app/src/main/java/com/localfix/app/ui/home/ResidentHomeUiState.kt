@@ -1,6 +1,7 @@
 package com.localfix.app.ui.home
 
 import com.localfix.app.ui.components.RequestLoadUiState
+import com.localfix.app.ui.requests.RequestStatusTone
 
 data class ResidentHomeUiState(
     val residentName: String,
@@ -23,6 +24,7 @@ data class ResidentHomeUiState(
                 id = "LF-1042",
                 title = "Leaking kitchen tap",
                 statusLabel = "In progress",
+                statusTone = RequestStatusTone.ACTIVE,
                 assignedWorker = "Arun · Plumbing",
                 updatedLabel = "Updated 18 min ago",
             ),
@@ -41,6 +43,7 @@ data class MaintenanceRequestSummary(
     val reference: String = id,
     val title: String,
     val statusLabel: String,
+    val statusTone: RequestStatusTone,
     val assignedWorker: String,
     val updatedLabel: String,
 )

@@ -3,6 +3,7 @@ package com.localfix.app.data.local
 import androidx.room.TypeConverter
 import com.localfix.app.data.model.AccessWindow
 import com.localfix.app.data.model.ServiceCategory
+import com.localfix.app.data.model.RequestDeliveryState
 import com.localfix.app.data.model.TicketStatus
 import com.localfix.app.data.model.UrgencySuggestion
 import kotlinx.serialization.encodeToString
@@ -39,4 +40,11 @@ class RoomConverters {
 
     @TypeConverter
     fun jsonToStringList(value: String): List<String> = Json.decodeFromString(value)
+
+    @TypeConverter
+    fun deliveryStateToString(value: RequestDeliveryState): String = value.name
+
+    @TypeConverter
+    fun stringToDeliveryState(value: String): RequestDeliveryState =
+        RequestDeliveryState.valueOf(value)
 }

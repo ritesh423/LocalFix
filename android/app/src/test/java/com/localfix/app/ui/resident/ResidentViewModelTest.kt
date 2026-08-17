@@ -3,7 +3,9 @@ package com.localfix.app.ui.resident
 import com.localfix.app.data.draft.InMemoryRequestDraftRepository
 import com.localfix.app.data.model.AccessWindow
 import com.localfix.app.data.model.NewMaintenanceRequest
+import com.localfix.app.data.model.MaintenanceRequest
 import com.localfix.app.data.model.ResidentData
+import com.localfix.app.data.model.RequestDeliveryState
 import com.localfix.app.data.model.SavedRequestDraft
 import com.localfix.app.data.model.UrgencySuggestion
 import com.localfix.app.data.resident.ResidentRepository
@@ -246,6 +248,38 @@ class ResidentViewModelTest {
             staleViewModel.uiState.value.requests.requestLoadState,
         )
         assertEquals(3, staleViewModel.uiState.value.requests.requests.size)
+    }
+
+    @Test
+    fun offlineQueuedRequestRemainsVisibleWithAnHonestStatus() = runTest {
+        val accountData = SampleResidentRepository().residentData.value
+        val localRequest = MaintenanceRequest(
+            id = "50000000-0000-0000-0000-000000000004",
+            title = "Kitchen tap is leaking",
+            description = "Water continues dripping after the tap is fully closed.",
+            category = ServiceCategory.PLUMBING,
+            status = TicketStatus.OPEN,
+            urgencySuggestion = UrgencySuggestion.SOON,
+            accessWindow = AccessWindow.MORNING,
+            assignedWorker = "Will be available after the request is sent",
+            updatedLabel = "Saved on this device",
+            deliveryState = RequestDeliveryState.PENDING,
+        )
+        val repository = FixedStateResidentRepository(
+            data = accountData.copy(requests = listOf(localRequest)),
+            syncState = RequestSyncState.Error("Server unavailable", hasPreviousResult = false),
+        )
+
+        val viewModel = ResidentViewModel(repository, InMemoryRequestDraftRepository())
+        advanceUntilIdle()
+
+        val request = viewModel.uiState.value.requests.requests.single()
+        assertEquals("Waiting to send", request.statusLabel)
+        assertEquals("LOCAL-50000000", request.reference)
+        assertEquals(
+            RequestLoadUiState.Stale("Server unavailable"),
+            viewModel.uiState.value.requests.requestLoadState,
+        )
     }
 
     @Test

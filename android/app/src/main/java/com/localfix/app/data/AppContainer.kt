@@ -8,10 +8,14 @@ import com.localfix.app.data.local.LocalFixDatabase
 import com.localfix.app.data.local.MIGRATION_1_2
 import com.localfix.app.data.local.MIGRATION_2_3
 import com.localfix.app.data.local.MIGRATION_3_4
+import com.localfix.app.data.local.MIGRATION_4_5
+import com.localfix.app.data.local.RoomResidentRequestStore
 import com.localfix.app.data.manager.ApiManagerRepository
 import com.localfix.app.data.manager.ManagerRepository
 import com.localfix.app.data.remote.HttpTicketApi
 import com.localfix.app.data.resident.ApiResidentRepository
+import com.localfix.app.data.resident.PendingRequestSyncer
+import com.localfix.app.data.resident.WorkManagerPendingRequestSyncScheduler
 import com.localfix.app.data.resident.ResidentRepository
 import com.localfix.app.data.worker.ApiWorkerRepository
 import com.localfix.app.data.worker.WorkerRepository
@@ -19,6 +23,7 @@ import com.localfix.app.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 interface AppContainer {
     val residentRepository: ResidentRepository
@@ -34,21 +39,41 @@ class DefaultAppContainer(context: Context) : AppContainer {
         context,
         LocalFixDatabase::class.java,
         "localfix.db",
-    ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+    ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
         .build()
 
     private val ticketApi = HttpTicketApi(
         baseUrl = context.getString(R.string.api_base_url),
         contentResolver = context.contentResolver,
     )
+    private val residentRequestStore = RoomResidentRequestStore(
+        ticketDao = database.residentTicketDao(),
+        pendingRequestDao = database.pendingResidentRequestDao(),
+        syncDao = database.residentRequestSyncDao(),
+    )
+    private val pendingRequestSyncScheduler = WorkManagerPendingRequestSyncScheduler(context)
+
+    val pendingRequestSyncer = PendingRequestSyncer(
+        ticketApi = ticketApi,
+        residentRequestStore = residentRequestStore,
+    )
 
     override val residentRepository: ResidentRepository = ApiResidentRepository(
         ticketApi = ticketApi,
-        residentTicketDao = database.residentTicketDao(),
+        residentRequestStore = residentRequestStore,
+        pendingRequestSyncScheduler = pendingRequestSyncScheduler,
         applicationScope = applicationScope,
     )
     override val managerRepository: ManagerRepository = ApiManagerRepository(ticketApi)
     override val workerRepository: WorkerRepository = ApiWorkerRepository(ticketApi)
     override val requestDraftRepository: RequestDraftRepository =
         RoomRequestDraftRepository(database.requestDraftDao())
+
+    init {
+        applicationScope.launch {
+            residentRequestStore.getRetryableRequestIds().forEach(
+                pendingRequestSyncScheduler::schedule,
+            )
+        }
+    }
 }

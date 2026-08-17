@@ -43,3 +43,22 @@ val MIGRATION_3_4 = Migration(3, 4) { database ->
             "ON resident_tickets(updatedAt)",
     )
 }
+
+val MIGRATION_4_5 = Migration(4, 5) { database ->
+    database.execSQL(
+        """
+        CREATE TABLE IF NOT EXISTS pending_resident_requests (
+            clientRequestId TEXT NOT NULL PRIMARY KEY,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL,
+            category TEXT NOT NULL,
+            urgencySuggestion TEXT NOT NULL,
+            accessWindow TEXT NOT NULL,
+            photoUri TEXT,
+            deliveryState TEXT NOT NULL,
+            failureMessage TEXT,
+            queuedAt TEXT NOT NULL
+        )
+        """.trimIndent(),
+    )
+}
