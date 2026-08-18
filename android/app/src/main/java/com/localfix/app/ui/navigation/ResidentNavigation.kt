@@ -52,6 +52,7 @@ fun ResidentNavigation(
     )
     val uiState by residentViewModel.uiState.collectAsStateWithLifecycle()
     val createRequestState by residentViewModel.createRequestState.collectAsStateWithLifecycle()
+    val discardedRequestId by residentViewModel.discardedRequestId.collectAsStateWithLifecycle()
     val navController = rememberNavController()
     val currentDestination = navController.currentBackStackEntryAsState().value?.destination
 
@@ -64,6 +65,13 @@ fun ResidentNavigation(
                 }
                 launchSingleTop = true
             }
+        }
+    }
+
+    LaunchedEffect(discardedRequestId) {
+        if (discardedRequestId != null) {
+            residentViewModel.consumeDiscardedRequest()
+            navController.popBackStack()
         }
     }
 
@@ -179,6 +187,12 @@ fun ResidentNavigation(
                     onRatingSelected = residentViewModel::selectReviewRating,
                     onFeedbackChanged = residentViewModel::updateReviewFeedback,
                     onSubmitReview = residentViewModel::submitReview,
+                    onRetryDelivery = {
+                        if (requestId != null) residentViewModel.retryFailedRequest(requestId)
+                    },
+                    onDiscardDelivery = {
+                        if (requestId != null) residentViewModel.discardFailedRequest(requestId)
+                    },
                 )
             }
         }

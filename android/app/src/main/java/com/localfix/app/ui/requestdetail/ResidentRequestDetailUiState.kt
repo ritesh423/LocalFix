@@ -22,7 +22,17 @@ data class ResidentRequestDetailUiState(
     val residentRating: Int?,
     val residentFeedback: String?,
     val canReview: Boolean,
+    val delivery: RequestDeliveryUiState?,
     val review: ResidentReviewUiState,
+)
+
+data class RequestDeliveryUiState(
+    val title: String,
+    val message: String,
+    val canRetry: Boolean,
+    val canDiscard: Boolean,
+    val isWorking: Boolean = false,
+    val actionError: String? = null,
 )
 
 data class ResidentReviewUiState(

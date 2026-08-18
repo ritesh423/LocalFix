@@ -222,6 +222,50 @@ class ApiResidentRepositoryTest {
         assertTrue(state.hasPreviousResult)
     }
 
+    @Test
+    fun failedRequestCanBeResetAndScheduledAsReplacementWork() = runTest {
+        val failedRequest = pendingRequest(RequestDeliveryState.FAILED)
+        val store = FakeResidentRequestStore(initialPendingRequests = listOf(failedRequest))
+        val scheduler = FakeSyncScheduler()
+        val repository = ApiResidentRepository(
+            FakeTicketApi(),
+            store,
+            scheduler,
+            backgroundScope,
+            clock,
+        )
+        runCurrent()
+
+        repository.retryFailedRequest(failedRequest.clientRequestId)
+        runCurrent()
+
+        assertEquals(
+            RequestDeliveryState.PENDING,
+            store.getPendingRequest(failedRequest.clientRequestId)?.deliveryState,
+        )
+        assertEquals(listOf(failedRequest.clientRequestId), scheduler.replacedIds)
+    }
+
+    @Test
+    fun failedRequestCanBeDiscardedFromTheLocalQueue() = runTest {
+        val failedRequest = pendingRequest(RequestDeliveryState.FAILED)
+        val store = FakeResidentRequestStore(initialPendingRequests = listOf(failedRequest))
+        val repository = ApiResidentRepository(
+            FakeTicketApi(),
+            store,
+            FakeSyncScheduler(),
+            backgroundScope,
+            clock,
+        )
+        runCurrent()
+
+        repository.discardFailedRequest(failedRequest.clientRequestId)
+        runCurrent()
+
+        assertEquals(null, store.getPendingRequest(failedRequest.clientRequestId))
+        assertTrue(repository.residentData.value.requests.isEmpty())
+    }
+
     private fun ticketResponse(
         title: String = "Leaking kitchen tap",
     ) = TicketResponse(
@@ -262,6 +306,25 @@ class ApiResidentRepositoryTest {
         residentFeedback = null,
         createdAt = "2026-08-12T10:00:00Z",
         updatedAt = "2026-08-12T10:00:00Z",
+    )
+
+    private fun pendingRequest(
+        deliveryState: RequestDeliveryState,
+    ) = PendingResidentRequestEntity(
+        clientRequestId = "50000000-0000-0000-0000-000000000004",
+        title = "Kitchen tap is leaking",
+        description = "Water continues dripping after the tap is fully closed.",
+        category = ServiceCategory.PLUMBING,
+        urgencySuggestion = UrgencySuggestion.SOON,
+        accessWindow = AccessWindow.MORNING,
+        photoUri = "content://localfix/photo/kitchen-tap",
+        deliveryState = deliveryState,
+        failureMessage = if (deliveryState == RequestDeliveryState.FAILED) {
+            "This request wasn't sent."
+        } else {
+            null
+        },
+        queuedAt = "2026-08-12T10:00:00Z",
     )
 
     private class FakeResidentRequestStore(
@@ -308,6 +371,22 @@ class ApiResidentRepositoryTest {
             }
         }
 
+        override suspend fun markRequestPending(clientRequestId: String) {
+            pendingRequests.value = pendingRequests.value.map {
+                if (it.clientRequestId == clientRequestId) {
+                    it.copy(deliveryState = RequestDeliveryState.PENDING, failureMessage = null)
+                } else {
+                    it
+                }
+            }
+        }
+
+        override suspend fun discardFailedRequest(clientRequestId: String) {
+            pendingRequests.value = pendingRequests.value.filterNot {
+                it.clientRequestId == clientRequestId
+            }
+        }
+
         override suspend fun upsertTicket(ticket: ResidentTicketEntity) {
             tickets.value = (tickets.value.filterNot { it.id == ticket.id } + ticket)
                 .sortedByDescending { it.updatedAt }
@@ -336,9 +415,11 @@ class ApiResidentRepositoryTest {
 
     private class FakeSyncScheduler : PendingRequestSyncScheduler {
         val scheduledIds = mutableListOf<String>()
+        val replacedIds = mutableListOf<String>()
 
-        override fun schedule(clientRequestId: String) {
+        override fun schedule(clientRequestId: String, replaceExisting: Boolean) {
             scheduledIds += clientRequestId
+            if (replaceExisting) replacedIds += clientRequestId
         }
     }
 

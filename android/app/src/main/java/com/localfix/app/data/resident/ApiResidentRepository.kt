@@ -74,8 +74,36 @@ class ApiResidentRepository(
 
     override suspend fun createRequest(request: NewMaintenanceRequest): String {
         residentRequestStore.queueRequest(request.toPendingEntity(clock))
-        pendingRequestSyncScheduler.schedule(request.clientRequestId)
+        pendingRequestSyncScheduler.schedule(request.clientRequestId, replaceExisting = false)
         return request.clientRequestId
+    }
+
+    override suspend fun retryFailedRequest(clientRequestId: String) {
+        val request = requireNotNull(
+            residentRequestStore.getPendingRequest(clientRequestId),
+        ) { "Pending request not found" }
+        require(request.deliveryState == RequestDeliveryState.FAILED) {
+            "Only failed requests can be retried manually"
+        }
+        residentRequestStore.markRequestPending(clientRequestId)
+        runCatching {
+            pendingRequestSyncScheduler.schedule(clientRequestId, replaceExisting = true)
+        }.onFailure {
+            residentRequestStore.markRequestFailed(
+                clientRequestId,
+                "The retry could not be scheduled. Your request is still saved.",
+            )
+        }.getOrThrow()
+    }
+
+    override suspend fun discardFailedRequest(clientRequestId: String) {
+        val request = requireNotNull(
+            residentRequestStore.getPendingRequest(clientRequestId),
+        ) { "Pending request not found" }
+        require(request.deliveryState == RequestDeliveryState.FAILED) {
+            "Only failed requests can be discarded"
+        }
+        residentRequestStore.discardFailedRequest(clientRequestId)
     }
 
     override suspend fun reviewRequest(

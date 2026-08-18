@@ -20,18 +20,28 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.AccessTime
 import androidx.compose.material.icons.outlined.AssignmentInd
 import androidx.compose.material.icons.outlined.Build
+import androidx.compose.material.icons.outlined.CloudQueue
+import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.PriorityHigh
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -56,6 +66,8 @@ fun ResidentRequestDetailScreen(
     onRatingSelected: (Int) -> Unit,
     onFeedbackChanged: (String) -> Unit,
     onSubmitReview: () -> Unit,
+    onRetryDelivery: () -> Unit,
+    onDiscardDelivery: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (uiState == null) {
@@ -71,6 +83,15 @@ fun ResidentRequestDetailScreen(
     ) {
         item {
             DetailHeader(uiState = uiState, onBack = onBack)
+        }
+        uiState.delivery?.let { delivery ->
+            item {
+                RequestDeliverySection(
+                    delivery = delivery,
+                    onRetry = onRetryDelivery,
+                    onDiscard = onDiscardDelivery,
+                )
+            }
         }
         uiState.photoUri?.let { photoUri ->
             item {
@@ -164,13 +185,15 @@ fun ResidentRequestDetailScreen(
                 )
             }
         }
-        item {
-            DetailSection(title = "Assignment") {
-                DetailRow(
-                    icon = Icons.Outlined.AssignmentInd,
-                    label = "Assigned worker",
-                    value = uiState.assignedWorker,
-                )
+        if (uiState.delivery == null) {
+            item {
+                DetailSection(title = "Assignment") {
+                    DetailRow(
+                        icon = Icons.Outlined.AssignmentInd,
+                        label = "Assigned worker",
+                        value = uiState.assignedWorker,
+                    )
+                }
             }
         }
         if (uiState.canReview) {
@@ -189,6 +212,87 @@ fun ResidentRequestDetailScreen(
         item {
             Spacer(modifier = Modifier.height(LocalFixSpacing.extraLarge))
         }
+    }
+}
+
+@Composable
+private fun RequestDeliverySection(
+    delivery: RequestDeliveryUiState,
+    onRetry: () -> Unit,
+    onDiscard: () -> Unit,
+) {
+    var showDiscardConfirmation by rememberSaveable { mutableStateOf(false) }
+    DetailSection(title = "Delivery status") {
+        DetailRow(
+            icon = Icons.Outlined.CloudQueue,
+            label = delivery.title,
+            value = delivery.message,
+        )
+        delivery.actionError?.let { FormError(it) }
+        if (delivery.canRetry || delivery.canDiscard) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = LocalFixSpacing.medium),
+                horizontalArrangement = Arrangement.spacedBy(LocalFixSpacing.small),
+            ) {
+                if (delivery.canRetry) {
+                    Button(
+                        onClick = onRetry,
+                        enabled = !delivery.isWorking,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("retry-failed-request"),
+                    ) {
+                        Icon(Icons.Outlined.Refresh, contentDescription = null)
+                        Text(
+                            text = "Retry",
+                            modifier = Modifier.padding(start = LocalFixSpacing.extraSmall),
+                        )
+                    }
+                }
+                if (delivery.canDiscard) {
+                    OutlinedButton(
+                        onClick = { showDiscardConfirmation = true },
+                        enabled = !delivery.isWorking,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("discard-failed-request"),
+                    ) {
+                        Icon(Icons.Outlined.DeleteOutline, contentDescription = null)
+                        Text(
+                            text = "Discard",
+                            modifier = Modifier.padding(start = LocalFixSpacing.extraSmall),
+                        )
+                    }
+                }
+            }
+        }
+    }
+    if (showDiscardConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDiscardConfirmation = false },
+            title = { Text("Discard this request?") },
+            text = {
+                Text("This removes the failed request and its saved details from this device.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDiscardConfirmation = false
+                        onDiscard()
+                    },
+                    modifier = Modifier.testTag("confirm-discard-failed-request"),
+                ) {
+                    Text("Discard")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDiscardConfirmation = false }) {
+                    Text("Keep request")
+                }
+            },
+        )
     }
 }
 
@@ -469,7 +573,7 @@ private fun DetailRow(
                 Icon(imageVector = icon, contentDescription = null)
             }
         }
-        Column {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = label,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -537,6 +641,7 @@ private fun ResidentRequestDetailPreview() {
                 residentRating = null,
                 residentFeedback = null,
                 canReview = false,
+                delivery = null,
                 review = ResidentReviewUiState(),
             ),
             onBack = {},
@@ -544,6 +649,8 @@ private fun ResidentRequestDetailPreview() {
             onRatingSelected = {},
             onFeedbackChanged = {},
             onSubmitReview = {},
+            onRetryDelivery = {},
+            onDiscardDelivery = {},
         )
     }
 }

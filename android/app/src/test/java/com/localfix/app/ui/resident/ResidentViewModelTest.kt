@@ -280,6 +280,62 @@ class ResidentViewModelTest {
             RequestLoadUiState.Stale("Server unavailable"),
             viewModel.uiState.value.requests.requestLoadState,
         )
+        assertEquals(
+            "Waiting to send",
+            viewModel.uiState.value.requestDetails[localRequest.id]?.delivery?.title,
+        )
+        assertEquals(
+            false,
+            viewModel.uiState.value.requestDetails[localRequest.id]?.delivery?.canRetry,
+        )
+    }
+
+    @Test
+    fun failedLocalRequestCanBeRetriedFromItsDetailPage() = runTest {
+        val failedRequest = failedLocalRequest()
+        val repository = FixedStateResidentRepository(
+            data = SampleResidentRepository().residentData.value.copy(
+                requests = listOf(failedRequest),
+            ),
+            syncState = RequestSyncState.Ready,
+        )
+        val viewModel = ResidentViewModel(repository, InMemoryRequestDraftRepository())
+        viewModel.openRequest(failedRequest.id)
+        advanceUntilIdle()
+
+        assertEquals(
+            true,
+            viewModel.uiState.value.requestDetails[failedRequest.id]?.delivery?.canRetry,
+        )
+        viewModel.retryFailedRequest(failedRequest.id)
+        advanceUntilIdle()
+
+        assertEquals(failedRequest.id, repository.lastRetriedRequestId)
+        assertEquals(
+            "Waiting to send",
+            viewModel.uiState.value.requestDetails[failedRequest.id]?.delivery?.title,
+        )
+    }
+
+    @Test
+    fun discardingFailedLocalRequestEmitsNavigationEvent() = runTest {
+        val failedRequest = failedLocalRequest()
+        val repository = FixedStateResidentRepository(
+            data = SampleResidentRepository().residentData.value.copy(
+                requests = listOf(failedRequest),
+            ),
+            syncState = RequestSyncState.Ready,
+        )
+        val viewModel = ResidentViewModel(repository, InMemoryRequestDraftRepository())
+        viewModel.openRequest(failedRequest.id)
+        advanceUntilIdle()
+
+        viewModel.discardFailedRequest(failedRequest.id)
+        advanceUntilIdle()
+
+        assertEquals(failedRequest.id, repository.lastDiscardedRequestId)
+        assertEquals(failedRequest.id, viewModel.discardedRequestId.value)
+        assertEquals(null, viewModel.uiState.value.requestDetails[failedRequest.id])
     }
 
     @Test
@@ -338,12 +394,28 @@ class ResidentViewModelTest {
         InMemoryRequestDraftRepository(),
     )
 
+    private fun failedLocalRequest() = MaintenanceRequest(
+        id = "50000000-0000-0000-0000-000000000004",
+        title = "Kitchen tap is leaking",
+        description = "Water continues dripping after the tap is fully closed.",
+        category = ServiceCategory.PLUMBING,
+        status = TicketStatus.OPEN,
+        urgencySuggestion = UrgencySuggestion.SOON,
+        accessWindow = AccessWindow.MORNING,
+        assignedWorker = "This request wasn't sent. Its details are still saved.",
+        updatedLabel = "Not sent",
+        deliveryState = RequestDeliveryState.FAILED,
+    )
+
     private class FixedStateResidentRepository(
         data: ResidentData,
         syncState: RequestSyncState,
     ) : ResidentRepository {
-        override val residentData: StateFlow<ResidentData> = MutableStateFlow(data)
+        private val mutableResidentData = MutableStateFlow(data)
+        override val residentData: StateFlow<ResidentData> = mutableResidentData
         override val requestSyncState: StateFlow<RequestSyncState> = MutableStateFlow(syncState)
+        var lastRetriedRequestId: String? = null
+        var lastDiscardedRequestId: String? = null
 
         override suspend fun createRequest(request: NewMaintenanceRequest): String =
             error("Not needed in this test")
@@ -357,5 +429,27 @@ class ResidentViewModelTest {
         ) = error("Not needed in this test")
 
         override suspend fun refreshRequests() = Unit
+
+        override suspend fun retryFailedRequest(clientRequestId: String) {
+            lastRetriedRequestId = clientRequestId
+            mutableResidentData.value = mutableResidentData.value.copy(
+                requests = mutableResidentData.value.requests.map { request ->
+                    if (request.id == clientRequestId) {
+                        request.copy(deliveryState = RequestDeliveryState.PENDING)
+                    } else {
+                        request
+                    }
+                },
+            )
+        }
+
+        override suspend fun discardFailedRequest(clientRequestId: String) {
+            lastDiscardedRequestId = clientRequestId
+            mutableResidentData.value = mutableResidentData.value.copy(
+                requests = mutableResidentData.value.requests.filterNot {
+                    it.id == clientRequestId
+                },
+            )
+        }
     }
 }

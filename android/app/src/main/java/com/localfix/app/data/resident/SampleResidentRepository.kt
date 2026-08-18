@@ -91,6 +91,10 @@ class SampleResidentRepository : ResidentRepository {
 
     override suspend fun refreshRequests() = Unit
 
+    override suspend fun retryFailedRequest(clientRequestId: String) = Unit
+
+    override suspend fun discardFailedRequest(clientRequestId: String) = Unit
+
     override suspend fun reviewRequest(
         ticketId: String,
         expectedVersion: Int,

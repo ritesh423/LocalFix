@@ -122,6 +122,20 @@ class PendingRequestSyncerTest {
             }
         }
 
+        override suspend fun markRequestPending(clientRequestId: String) {
+            pending.value = pending.value.map {
+                if (it.clientRequestId == clientRequestId) {
+                    it.copy(deliveryState = RequestDeliveryState.PENDING, failureMessage = null)
+                } else {
+                    it
+                }
+            }
+        }
+
+        override suspend fun discardFailedRequest(clientRequestId: String) {
+            pending.value = pending.value.filterNot { it.clientRequestId == clientRequestId }
+        }
+
         override suspend fun upsertTicket(ticket: ResidentTicketEntity) {
             tickets.value = listOf(ticket)
         }

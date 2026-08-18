@@ -28,6 +28,7 @@ import com.localfix.app.ui.home.ServiceCategoryType
 import com.localfix.app.ui.home.ServiceCategory as ServiceCategoryItem
 import com.localfix.app.ui.profile.ResidentProfileUiState
 import com.localfix.app.ui.requestdetail.ResidentRequestDetailUiState
+import com.localfix.app.ui.requestdetail.RequestDeliveryUiState
 import com.localfix.app.ui.requestdetail.ResidentReviewUiState
 import com.localfix.app.ui.requests.RequestFilter
 import com.localfix.app.ui.requests.RequestStatusTone
@@ -49,9 +50,12 @@ class ResidentViewModel(
     private val selectedFilter = MutableStateFlow(RequestFilter.ALL)
     private val mutableCreateRequestState = MutableStateFlow(CreateRequestUiState())
     private val reviewState = MutableStateFlow(ResidentReviewState())
+    private val deliveryActionState = MutableStateFlow(DeliveryActionState())
+    private val mutableDiscardedRequestId = MutableStateFlow<String?>(null)
     private var hasEditedDraft = false
 
     val createRequestState = mutableCreateRequestState.asStateFlow()
+    val discardedRequestId = mutableDiscardedRequestId.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -70,6 +74,7 @@ class ResidentViewModel(
         repository.requestSyncState,
         selectedFilter,
         reviewState,
+        deliveryActionState,
         ::createResidentUiState,
     ).stateIn(
         scope = viewModelScope,
@@ -79,6 +84,7 @@ class ResidentViewModel(
             repository.requestSyncState.value,
             selectedFilter.value,
             reviewState.value,
+            deliveryActionState.value,
         ),
     )
 
@@ -96,6 +102,58 @@ class ResidentViewModel(
         if (reviewState.value.ticketId != ticketId) {
             reviewState.value = ResidentReviewState(ticketId = ticketId)
         }
+        if (deliveryActionState.value.ticketId != ticketId) {
+            deliveryActionState.value = DeliveryActionState(ticketId = ticketId)
+        }
+    }
+
+    fun retryFailedRequest(ticketId: String) {
+        val ticket = repository.residentData.value.requests.find { it.id == ticketId } ?: return
+        if (ticket.deliveryState != RequestDeliveryState.FAILED ||
+            deliveryActionState.value.isWorking
+        ) {
+            return
+        }
+        deliveryActionState.value = DeliveryActionState(ticketId = ticketId, isWorking = true)
+        viewModelScope.launch {
+            runCatching { repository.retryFailedRequest(ticketId) }
+                .onSuccess {
+                    deliveryActionState.value = DeliveryActionState(ticketId = ticketId)
+                }
+                .onFailure {
+                    deliveryActionState.value = DeliveryActionState(
+                        ticketId = ticketId,
+                        actionError = "Couldn't schedule the retry. Try again.",
+                    )
+                }
+        }
+    }
+
+    fun discardFailedRequest(ticketId: String) {
+        val ticket = repository.residentData.value.requests.find { it.id == ticketId } ?: return
+        if (ticket.deliveryState != RequestDeliveryState.FAILED ||
+            deliveryActionState.value.isWorking
+        ) {
+            return
+        }
+        deliveryActionState.value = DeliveryActionState(ticketId = ticketId, isWorking = true)
+        viewModelScope.launch {
+            runCatching { repository.discardFailedRequest(ticketId) }
+                .onSuccess {
+                    deliveryActionState.value = DeliveryActionState()
+                    mutableDiscardedRequestId.value = ticketId
+                }
+                .onFailure {
+                    deliveryActionState.value = DeliveryActionState(
+                        ticketId = ticketId,
+                        actionError = "Couldn't discard this request. Try again.",
+                    )
+                }
+        }
+    }
+
+    fun consumeDiscardedRequest() {
+        mutableDiscardedRequestId.value = null
     }
 
     fun selectReviewDecision(decision: ResidentReviewDecision) {
@@ -387,6 +445,7 @@ private fun createResidentUiState(
     requestSyncState: RequestSyncState,
     selectedFilter: RequestFilter,
     reviewState: ResidentReviewState,
+    deliveryActionState: DeliveryActionState,
 ): ResidentUiState {
     val visibleRequests = data.requests.filter { request ->
         when (selectedFilter) {
@@ -462,6 +521,7 @@ private fun createResidentUiState(
         requestDetails = data.requests.associate { request ->
             request.id to request.toDetailUiState(
                 reviewState.takeIf { it.ticketId == request.id },
+                deliveryActionState.takeIf { it.ticketId == request.id },
             )
         },
     )
@@ -486,6 +546,7 @@ private fun RequestSyncState.toLoadUiState(
 
 private fun MaintenanceRequest.toDetailUiState(
     reviewState: ResidentReviewState?,
+    deliveryActionState: DeliveryActionState?,
 ): ResidentRequestDetailUiState =
     ResidentRequestDetailUiState(
         requestId = id,
@@ -506,8 +567,29 @@ private fun MaintenanceRequest.toDetailUiState(
         residentRating = residentRating,
         residentFeedback = residentFeedback,
         canReview = status == TicketStatus.AWAITING_CONFIRMATION,
+        delivery = toDeliveryUiState(deliveryActionState),
         review = reviewState?.toUiState() ?: ResidentReviewUiState(),
     )
+
+private fun MaintenanceRequest.toDeliveryUiState(
+    actionState: DeliveryActionState?,
+): RequestDeliveryUiState? = when (deliveryState) {
+    RequestDeliveryState.SYNCED -> null
+    RequestDeliveryState.PENDING -> RequestDeliveryUiState(
+        title = "Waiting to send",
+        message = "This request is saved on your device and will send automatically when connected.",
+        canRetry = false,
+        canDiscard = false,
+    )
+    RequestDeliveryState.FAILED -> RequestDeliveryUiState(
+        title = "Request wasn't sent",
+        message = assignedWorker,
+        canRetry = true,
+        canDiscard = true,
+        isWorking = actionState?.isWorking == true,
+        actionError = actionState?.actionError,
+    )
+}
 
 private data class ResidentReviewState(
     val ticketId: String? = null,
@@ -520,6 +602,12 @@ private data class ResidentReviewState(
     val isSubmitting: Boolean = false,
     val submissionError: String? = null,
     val hasJustSubmitted: Boolean = false,
+)
+
+private data class DeliveryActionState(
+    val ticketId: String? = null,
+    val isWorking: Boolean = false,
+    val actionError: String? = null,
 )
 
 private fun ResidentReviewState.toUiState() = ResidentReviewUiState(

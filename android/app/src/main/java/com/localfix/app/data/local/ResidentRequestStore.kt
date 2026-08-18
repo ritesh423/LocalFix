@@ -18,6 +18,10 @@ interface ResidentRequestStore {
 
     suspend fun markRequestFailed(clientRequestId: String, message: String)
 
+    suspend fun markRequestPending(clientRequestId: String)
+
+    suspend fun discardFailedRequest(clientRequestId: String)
+
     suspend fun upsertTicket(ticket: ResidentTicketEntity)
 
     suspend fun completePendingRequest(
@@ -62,6 +66,18 @@ class RoomResidentRequestStore(
             deliveryState = RequestDeliveryState.FAILED,
             message = message,
         )
+    }
+
+    override suspend fun markRequestPending(clientRequestId: String) {
+        pendingRequestDao.updateDeliveryState(
+            clientRequestId = clientRequestId,
+            deliveryState = RequestDeliveryState.PENDING,
+            message = null,
+        )
+    }
+
+    override suspend fun discardFailedRequest(clientRequestId: String) {
+        pendingRequestDao.deleteRequest(clientRequestId)
     }
 
     override suspend fun upsertTicket(ticket: ResidentTicketEntity) {

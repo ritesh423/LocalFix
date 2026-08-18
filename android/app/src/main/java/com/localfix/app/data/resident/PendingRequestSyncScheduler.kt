@@ -11,7 +11,7 @@ import androidx.work.workDataOf
 import java.util.concurrent.TimeUnit
 
 fun interface PendingRequestSyncScheduler {
-    fun schedule(clientRequestId: String)
+    fun schedule(clientRequestId: String, replaceExisting: Boolean)
 }
 
 class WorkManagerPendingRequestSyncScheduler(
@@ -19,7 +19,7 @@ class WorkManagerPendingRequestSyncScheduler(
 ) : PendingRequestSyncScheduler {
     private val workManager = WorkManager.getInstance(context)
 
-    override fun schedule(clientRequestId: String) {
+    override fun schedule(clientRequestId: String, replaceExisting: Boolean) {
         val request = OneTimeWorkRequestBuilder<PendingRequestSyncWorker>()
             .setInputData(workDataOf(CLIENT_REQUEST_ID_KEY to clientRequestId))
             .setConstraints(
@@ -35,7 +35,7 @@ class WorkManagerPendingRequestSyncScheduler(
             .build()
         workManager.enqueueUniqueWork(
             "$UNIQUE_WORK_PREFIX$clientRequestId",
-            ExistingWorkPolicy.KEEP,
+            if (replaceExisting) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP,
             request,
         )
     }

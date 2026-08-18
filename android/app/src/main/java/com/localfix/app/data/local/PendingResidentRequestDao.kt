@@ -36,4 +36,7 @@ interface PendingResidentRequestDao {
         deliveryState: RequestDeliveryState,
         message: String?,
     )
+
+    @Query("DELETE FROM pending_resident_requests WHERE clientRequestId = :clientRequestId")
+    suspend fun deleteRequest(clientRequestId: String)
 }

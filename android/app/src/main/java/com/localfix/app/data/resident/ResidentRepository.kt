@@ -12,6 +12,10 @@ interface ResidentRepository {
 
     suspend fun refreshRequests()
 
+    suspend fun retryFailedRequest(clientRequestId: String)
+
+    suspend fun discardFailedRequest(clientRequestId: String)
+
     suspend fun reviewRequest(
         ticketId: String,
         expectedVersion: Int,

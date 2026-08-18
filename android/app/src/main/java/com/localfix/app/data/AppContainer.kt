@@ -71,9 +71,12 @@ class DefaultAppContainer(context: Context) : AppContainer {
 
     init {
         applicationScope.launch {
-            residentRequestStore.getRetryableRequestIds().forEach(
-                pendingRequestSyncScheduler::schedule,
-            )
+            residentRequestStore.getRetryableRequestIds().forEach { clientRequestId ->
+                pendingRequestSyncScheduler.schedule(
+                    clientRequestId,
+                    replaceExisting = false,
+                )
+            }
         }
     }
 }
