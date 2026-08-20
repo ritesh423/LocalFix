@@ -1,5 +1,7 @@
 package com.localfix.app.data.resident
 
+import com.localfix.app.data.model.ResidentReviewDecision
+
 import com.localfix.app.data.model.MaintenanceRequest
 import com.localfix.app.data.model.NewMaintenanceRequest
 import com.localfix.app.data.model.AccessWindow

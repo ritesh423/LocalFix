@@ -1,14 +1,17 @@
 package com.localfix.app.data.resident
 
 import com.localfix.app.data.local.PendingResidentRequestEntity
+import com.localfix.app.data.local.PendingResidentReviewEntity
 import com.localfix.app.data.local.ResidentTicketEntity
 import com.localfix.app.data.model.NewMaintenanceRequest
 import com.localfix.app.data.model.RequestDeliveryState
+import com.localfix.app.data.model.ResidentReviewDecision
 import com.localfix.app.data.model.ServiceCategory
 import com.localfix.app.data.model.TicketStatus
 import com.localfix.app.data.model.UrgencySuggestion
 import com.localfix.app.data.model.AccessWindow
 import com.localfix.app.data.remote.TicketCreatePayload
+import com.localfix.app.data.remote.TicketReviewPayload
 import com.localfix.app.data.remote.TicketResponse
 import java.time.Clock
 
@@ -35,6 +38,27 @@ internal fun PendingResidentRequestEntity.toPayload(): TicketCreatePayload = Tic
     urgencySuggestion = urgencySuggestion.name.lowercase(),
     accessWindow = accessWindow.name.lowercase(),
 )
+
+internal fun PendingResidentReviewEntity.toPayload(): TicketReviewPayload = TicketReviewPayload(
+    expectedVersion = expectedVersion,
+    decision = decision.name.lowercase(),
+    rating = rating,
+    feedback = feedback,
+)
+
+internal fun TicketResponse.matches(review: PendingResidentReviewEntity): Boolean =
+    version > review.expectedVersion &&
+        residentRating == review.rating &&
+        residentFeedback.orEmpty() == review.feedback.orEmpty() &&
+        when (review.decision) {
+            ResidentReviewDecision.CONFIRM -> status == "completed"
+            ResidentReviewDecision.REQUEST_REWORK -> status in setOf(
+                "assigned",
+                "in_progress",
+                "blocked",
+                "awaiting_confirmation",
+            )
+        }
 
 internal fun TicketResponse.toResidentTicketEntity(): ResidentTicketEntity = ResidentTicketEntity(
     id = id,

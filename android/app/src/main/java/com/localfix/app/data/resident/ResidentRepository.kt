@@ -2,6 +2,7 @@ package com.localfix.app.data.resident
 
 import com.localfix.app.data.model.ResidentData
 import com.localfix.app.data.model.NewMaintenanceRequest
+import com.localfix.app.data.model.ResidentReviewDecision
 import kotlinx.coroutines.flow.StateFlow
 
 interface ResidentRepository {
@@ -23,11 +24,6 @@ interface ResidentRepository {
         rating: Int?,
         feedback: String?,
     )
-}
-
-enum class ResidentReviewDecision {
-    CONFIRM,
-    REQUEST_REWORK,
 }
 
 sealed interface RequestSyncState {

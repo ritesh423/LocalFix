@@ -9,7 +9,7 @@ import com.localfix.app.data.model.RequestDeliveryState
 import com.localfix.app.data.model.SavedRequestDraft
 import com.localfix.app.data.model.UrgencySuggestion
 import com.localfix.app.data.resident.ResidentRepository
-import com.localfix.app.data.resident.ResidentReviewDecision
+import com.localfix.app.data.model.ResidentReviewDecision
 import com.localfix.app.data.resident.RequestSyncState
 import com.localfix.app.data.resident.SampleResidentRepository
 import com.localfix.app.data.model.ServiceCategory
@@ -387,6 +387,63 @@ class ResidentViewModelTest {
         val request = repository.residentData.value.requests.single { it.id == "LF-1018" }
         assertEquals(TicketStatus.ASSIGNED, request.status)
         assertEquals("The switch still sparks when pressed.", request.residentFeedback)
+    }
+
+    @Test
+    fun queuedReviewIsShownAsSavedAndCannotBeSubmittedTwice() = runTest {
+        val queuedReview = SampleResidentRepository().residentData.value.requests
+            .single { it.id == "LF-1018" }
+            .copy(
+                residentRating = 5,
+                residentFeedback = "The switch works safely now.",
+                reviewDeliveryState = RequestDeliveryState.PENDING,
+                pendingReviewDecision = ResidentReviewDecision.CONFIRM,
+            )
+        val repository = FixedStateResidentRepository(
+            data = SampleResidentRepository().residentData.value.copy(
+                requests = listOf(queuedReview),
+            ),
+            syncState = RequestSyncState.Ready,
+        )
+        val viewModel = ResidentViewModel(repository, InMemoryRequestDraftRepository())
+
+        viewModel.openRequest(queuedReview.id)
+        advanceUntilIdle()
+
+        val detail = viewModel.uiState.value.requestDetails.getValue(queuedReview.id)
+        assertEquals(false, detail.canReview)
+        assertEquals("Review waiting to send", detail.reviewDelivery?.title)
+        assertEquals(5, detail.residentRating)
+        assertEquals(0, viewModel.uiState.value.home.awaitingConfirmationCount)
+    }
+
+    @Test
+    fun failedReviewRestoresTheResidentsChoicesForCorrection() = runTest {
+        val failedReview = SampleResidentRepository().residentData.value.requests
+            .single { it.id == "LF-1018" }
+            .copy(
+                residentFeedback = "The switch still sparks when pressed.",
+                reviewDeliveryState = RequestDeliveryState.FAILED,
+                pendingReviewDecision = ResidentReviewDecision.REQUEST_REWORK,
+                reviewFailureMessage = "This review wasn't sent.",
+            )
+        val repository = FixedStateResidentRepository(
+            data = SampleResidentRepository().residentData.value.copy(
+                requests = listOf(failedReview),
+            ),
+            syncState = RequestSyncState.Ready,
+        )
+        val viewModel = ResidentViewModel(repository, InMemoryRequestDraftRepository())
+
+        viewModel.openRequest(failedReview.id)
+        advanceUntilIdle()
+
+        val detail = viewModel.uiState.value.requestDetails.getValue(failedReview.id)
+        assertEquals(true, detail.canReview)
+        assertEquals("Review wasn't sent", detail.reviewDelivery?.title)
+        assertEquals(ResidentReviewDecision.REQUEST_REWORK, detail.review.selectedDecision)
+        assertEquals("The switch still sparks when pressed.", detail.review.feedback)
+        assertEquals(1, viewModel.uiState.value.home.awaitingConfirmationCount)
     }
 
     private fun createViewModel(): ResidentViewModel = ResidentViewModel(

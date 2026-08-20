@@ -32,12 +32,20 @@ data class MaintenanceRequest(
     val residentRating: Int? = null,
     val residentFeedback: String? = null,
     val deliveryState: RequestDeliveryState = RequestDeliveryState.SYNCED,
+    val reviewDeliveryState: RequestDeliveryState = RequestDeliveryState.SYNCED,
+    val pendingReviewDecision: ResidentReviewDecision? = null,
+    val reviewFailureMessage: String? = null,
 )
 
 enum class RequestDeliveryState {
     SYNCED,
     PENDING,
     FAILED,
+}
+
+enum class ResidentReviewDecision {
+    CONFIRM,
+    REQUEST_REWORK,
 }
 
 data class NewMaintenanceRequest(

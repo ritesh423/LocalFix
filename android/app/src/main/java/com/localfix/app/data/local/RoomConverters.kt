@@ -5,7 +5,9 @@ import com.localfix.app.data.model.AccessWindow
 import com.localfix.app.data.model.ServiceCategory
 import com.localfix.app.data.model.RequestDeliveryState
 import com.localfix.app.data.model.TicketStatus
+import com.localfix.app.data.model.TicketCommandType
 import com.localfix.app.data.model.UrgencySuggestion
+import com.localfix.app.data.model.ResidentReviewDecision
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -47,4 +49,18 @@ class RoomConverters {
     @TypeConverter
     fun stringToDeliveryState(value: String): RequestDeliveryState =
         RequestDeliveryState.valueOf(value)
+
+    @TypeConverter
+    fun reviewDecisionToString(value: ResidentReviewDecision): String = value.name
+
+    @TypeConverter
+    fun stringToReviewDecision(value: String): ResidentReviewDecision =
+        ResidentReviewDecision.valueOf(value)
+
+    @TypeConverter
+    fun ticketCommandTypeToString(value: TicketCommandType): String = value.name
+
+    @TypeConverter
+    fun stringToTicketCommandType(value: String): TicketCommandType =
+        TicketCommandType.valueOf(value)
 }

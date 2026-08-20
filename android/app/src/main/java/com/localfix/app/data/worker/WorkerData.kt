@@ -3,6 +3,7 @@ package com.localfix.app.data.worker
 import com.localfix.app.data.model.AccessWindow
 import com.localfix.app.data.model.ServiceCategory
 import com.localfix.app.data.model.TicketStatus
+import com.localfix.app.data.model.RequestDeliveryState
 import com.localfix.app.data.model.UrgencySuggestion
 
 data class WorkerData(
@@ -28,6 +29,8 @@ data class WorkerJob(
     val hasCompletionPhoto: Boolean,
     val reworkReason: String?,
     val updatedLabel: String,
+    val startDeliveryState: RequestDeliveryState = RequestDeliveryState.SYNCED,
+    val startFailureMessage: String? = null,
 )
 
 data class WorkerJobEvent(

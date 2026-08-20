@@ -22,6 +22,9 @@ interface ResidentRequestSyncDao {
     @Query("DELETE FROM pending_resident_requests WHERE clientRequestId IN (:clientRequestIds)")
     suspend fun deleteAcknowledgedRequests(clientRequestIds: List<String>)
 
+    @Query("DELETE FROM pending_resident_reviews WHERE ticketId = :ticketId")
+    suspend fun deletePendingReview(ticketId: String)
+
     @Transaction
     suspend fun completePendingRequest(
         clientRequestId: String,
@@ -29,6 +32,15 @@ interface ResidentRequestSyncDao {
     ) {
         upsertTicket(ticket)
         deletePendingRequest(clientRequestId)
+    }
+
+    @Transaction
+    suspend fun completePendingReview(
+        ticketId: String,
+        ticket: ResidentTicketEntity,
+    ) {
+        upsertTicket(ticket)
+        deletePendingReview(ticketId)
     }
 
     @Transaction

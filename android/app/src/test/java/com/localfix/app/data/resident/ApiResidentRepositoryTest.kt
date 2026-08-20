@@ -3,10 +3,12 @@ package com.localfix.app.data.resident
 import com.localfix.app.data.model.AccessWindow
 import com.localfix.app.data.model.NewMaintenanceRequest
 import com.localfix.app.data.model.RequestDeliveryState
+import com.localfix.app.data.model.ResidentReviewDecision
 import com.localfix.app.data.model.ServiceCategory
 import com.localfix.app.data.model.TicketStatus
 import com.localfix.app.data.model.UrgencySuggestion
 import com.localfix.app.data.local.PendingResidentRequestEntity
+import com.localfix.app.data.local.PendingResidentReviewEntity
 import com.localfix.app.data.local.ResidentRequestStore
 import com.localfix.app.data.local.ResidentTicketEntity
 import com.localfix.app.data.remote.TicketApi
@@ -43,6 +45,7 @@ class ApiResidentRepositoryTest {
             FakeResidentRequestStore(),
             FakeSyncScheduler(),
             backgroundScope,
+            FakeReviewSyncScheduler(),
             clock,
         )
 
@@ -68,6 +71,7 @@ class ApiResidentRepositoryTest {
             store,
             scheduler,
             backgroundScope,
+            FakeReviewSyncScheduler(),
             clock,
         )
 
@@ -100,6 +104,7 @@ class ApiResidentRepositoryTest {
             residentRequestStore = FakeResidentRequestStore(),
             pendingRequestSyncScheduler = FakeSyncScheduler(),
             applicationScope = backgroundScope,
+            pendingReviewSyncScheduler = FakeReviewSyncScheduler(),
             clock = clock,
         )
 
@@ -120,6 +125,7 @@ class ApiResidentRepositoryTest {
             FakeResidentRequestStore(),
             FakeSyncScheduler(),
             backgroundScope,
+            FakeReviewSyncScheduler(),
             clock,
         )
         repository.refreshRequests()
@@ -151,6 +157,7 @@ class ApiResidentRepositoryTest {
             FakeResidentRequestStore(),
             FakeSyncScheduler(),
             backgroundScope,
+            FakeReviewSyncScheduler(),
             clock,
         )
 
@@ -168,17 +175,20 @@ class ApiResidentRepositoryTest {
     }
 
     @Test
-    fun reviewSendsCurrentVersionAndReplacesTheLocalRequest() = runTest {
+    fun reviewIsSavedLocallyAndScheduledBeforeAnyNetworkCall() = runTest {
         val ticketApi = FakeTicketApi(
             tickets = mutableListOf(
                 ticketResponse().copy(status = "awaiting_confirmation", version = 4),
             ),
         )
+        val store = FakeResidentRequestStore()
+        val reviewScheduler = FakeReviewSyncScheduler()
         val repository = ApiResidentRepository(
             ticketApi,
-            FakeResidentRequestStore(),
+            store,
             FakeSyncScheduler(),
             backgroundScope,
+            reviewScheduler,
             clock,
         )
         repository.refreshRequests()
@@ -193,12 +203,18 @@ class ApiResidentRepositoryTest {
         )
         runCurrent()
 
-        assertEquals(4, ticketApi.lastReviewPayload?.expectedVersion)
-        assertEquals("confirm", ticketApi.lastReviewPayload?.decision)
-        assertEquals(5, ticketApi.lastReviewPayload?.rating)
-        val reviewed = repository.residentData.value.requests.single()
-        assertEquals(TicketStatus.COMPLETED, reviewed.status)
-        assertEquals(5, reviewed.residentRating)
+        assertEquals(null, ticketApi.lastReviewPayload)
+        val pendingReview = store.getPendingReview(
+            "90000000-0000-0000-0000-000000000001",
+        )
+        assertEquals(4, pendingReview?.expectedVersion)
+        assertEquals(ResidentReviewDecision.CONFIRM, pendingReview?.decision)
+        assertEquals(5, pendingReview?.rating)
+        assertEquals(listOf(pendingReview?.ticketId), reviewScheduler.replacedIds)
+        val locallyUpdated = repository.residentData.value.requests.single()
+        assertEquals(TicketStatus.AWAITING_CONFIRMATION, locallyUpdated.status)
+        assertEquals(RequestDeliveryState.PENDING, locallyUpdated.reviewDeliveryState)
+        assertEquals(5, locallyUpdated.residentRating)
     }
 
     @Test
@@ -210,6 +226,7 @@ class ApiResidentRepositoryTest {
             residentRequestStore = store,
             pendingRequestSyncScheduler = FakeSyncScheduler(),
             applicationScope = backgroundScope,
+            pendingReviewSyncScheduler = FakeReviewSyncScheduler(),
             clock = clock,
         )
         runCurrent()
@@ -232,6 +249,7 @@ class ApiResidentRepositoryTest {
             store,
             scheduler,
             backgroundScope,
+            FakeReviewSyncScheduler(),
             clock,
         )
         runCurrent()
@@ -255,6 +273,7 @@ class ApiResidentRepositoryTest {
             store,
             FakeSyncScheduler(),
             backgroundScope,
+            FakeReviewSyncScheduler(),
             clock,
         )
         runCurrent()
@@ -330,14 +349,19 @@ class ApiResidentRepositoryTest {
     private class FakeResidentRequestStore(
         initialTickets: List<ResidentTicketEntity> = emptyList(),
         initialPendingRequests: List<PendingResidentRequestEntity> = emptyList(),
+        initialPendingReviews: List<PendingResidentReviewEntity> = emptyList(),
     ) : ResidentRequestStore {
         private val tickets = MutableStateFlow(initialTickets.sortedByDescending { it.updatedAt })
         private val pendingRequests = MutableStateFlow(initialPendingRequests)
+        private val pendingReviews = MutableStateFlow(initialPendingReviews)
 
         override fun observeTickets(): Flow<List<ResidentTicketEntity>> = tickets
 
         override fun observePendingRequests(): Flow<List<PendingResidentRequestEntity>> =
             pendingRequests
+
+        override fun observePendingReviews(): Flow<List<PendingResidentReviewEntity>> =
+            pendingReviews
 
         override suspend fun hasLocalRequests(): Boolean =
             tickets.value.isNotEmpty() || pendingRequests.value.isNotEmpty()
@@ -351,6 +375,13 @@ class ApiResidentRepositoryTest {
         override suspend fun getRetryableRequestIds(): List<String> = pendingRequests.value
             .filter { it.deliveryState == RequestDeliveryState.PENDING }
             .map(PendingResidentRequestEntity::clientRequestId)
+
+        override suspend fun getPendingReview(ticketId: String): PendingResidentReviewEntity? =
+            pendingReviews.value.find { it.ticketId == ticketId }
+
+        override suspend fun getRetryableReviewIds(): List<String> = pendingReviews.value
+            .filter { it.deliveryState == RequestDeliveryState.PENDING }
+            .map(PendingResidentReviewEntity::ticketId)
 
         override suspend fun queueRequest(request: PendingResidentRequestEntity) {
             pendingRequests.value = listOf(request) + pendingRequests.value.filterNot {
@@ -387,6 +418,25 @@ class ApiResidentRepositoryTest {
             }
         }
 
+        override suspend fun queueReview(review: PendingResidentReviewEntity) {
+            pendingReviews.value = listOf(review) + pendingReviews.value.filterNot {
+                it.ticketId == review.ticketId
+            }
+        }
+
+        override suspend fun markReviewFailed(ticketId: String, message: String) {
+            pendingReviews.value = pendingReviews.value.map {
+                if (it.ticketId == ticketId) {
+                    it.copy(
+                        deliveryState = RequestDeliveryState.FAILED,
+                        failureMessage = message,
+                    )
+                } else {
+                    it
+                }
+            }
+        }
+
         override suspend fun upsertTicket(ticket: ResidentTicketEntity) {
             tickets.value = (tickets.value.filterNot { it.id == ticket.id } + ticket)
                 .sortedByDescending { it.updatedAt }
@@ -400,6 +450,14 @@ class ApiResidentRepositoryTest {
             pendingRequests.value = pendingRequests.value.filterNot {
                 it.clientRequestId == clientRequestId
             }
+        }
+
+        override suspend fun completePendingReview(
+            ticketId: String,
+            ticket: ResidentTicketEntity,
+        ) {
+            upsertTicket(ticket)
+            pendingReviews.value = pendingReviews.value.filterNot { it.ticketId == ticketId }
         }
 
         override suspend fun replaceServerSnapshot(
@@ -420,6 +478,14 @@ class ApiResidentRepositoryTest {
         override fun schedule(clientRequestId: String, replaceExisting: Boolean) {
             scheduledIds += clientRequestId
             if (replaceExisting) replacedIds += clientRequestId
+        }
+    }
+
+    private class FakeReviewSyncScheduler : PendingReviewSyncScheduler {
+        val replacedIds = mutableListOf<String>()
+
+        override fun schedule(ticketId: String, replaceExisting: Boolean) {
+            if (replaceExisting) replacedIds += ticketId
         }
     }
 

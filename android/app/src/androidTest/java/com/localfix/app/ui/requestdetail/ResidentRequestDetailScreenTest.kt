@@ -1,9 +1,11 @@
 package com.localfix.app.ui.requestdetail
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import com.localfix.app.ui.requests.RequestStatusTone
@@ -44,6 +46,40 @@ class ResidentRequestDetailScreenTest {
         composeRule.onNodeWithText("Discard this request?").assertIsDisplayed()
         composeRule.onNodeWithTag("confirm-discard-failed-request").performClick()
         assertTrue(discarded)
+    }
+
+    @Test
+    fun queuedReviewShowsItsSavedStateWithoutAnotherSubmitButton() {
+        composeRule.setContent {
+            LocalFixTheme {
+                ResidentRequestDetailScreen(
+                    uiState = failedRequestState().copy(
+                        id = "LF-90000000",
+                        statusLabel = "Confirm repair",
+                        residentRating = 5,
+                        residentFeedback = "The repair works properly now.",
+                        delivery = null,
+                        reviewDelivery = ReviewDeliveryUiState(
+                            title = "Review waiting to send",
+                            message = "Your review is saved on this device.",
+                            isFailure = false,
+                        ),
+                    ),
+                    onBack = {},
+                    onReviewDecisionSelected = {},
+                    onRatingSelected = {},
+                    onFeedbackChanged = {},
+                    onSubmitReview = {},
+                    onRetryDelivery = {},
+                    onDiscardDelivery = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Review waiting to send")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onAllNodesWithTag("resident-submit-review").assertCountEquals(0)
     }
 
     private fun failedRequestState() = ResidentRequestDetailUiState(

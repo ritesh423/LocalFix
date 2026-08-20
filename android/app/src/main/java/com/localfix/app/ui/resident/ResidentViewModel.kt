@@ -8,6 +8,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.localfix.app.data.draft.RequestDraftRepository
 import com.localfix.app.data.model.ResidentData
 import com.localfix.app.data.model.RequestDeliveryState
+import com.localfix.app.data.model.ResidentReviewDecision
 import com.localfix.app.data.model.MaintenanceRequest
 import com.localfix.app.data.model.NewMaintenanceRequest
 import com.localfix.app.data.model.SavedRequestDraft
@@ -16,7 +17,6 @@ import com.localfix.app.data.model.ServiceCategory
 import com.localfix.app.data.model.TicketStatus
 import com.localfix.app.data.model.UrgencySuggestion
 import com.localfix.app.data.resident.ResidentRepository
-import com.localfix.app.data.resident.ResidentReviewDecision
 import com.localfix.app.data.resident.RequestSyncState
 import com.localfix.app.ui.home.MaintenanceRequestSummary
 import com.localfix.app.ui.create.CreateRequestUiState
@@ -29,6 +29,7 @@ import com.localfix.app.ui.home.ServiceCategory as ServiceCategoryItem
 import com.localfix.app.ui.profile.ResidentProfileUiState
 import com.localfix.app.ui.requestdetail.ResidentRequestDetailUiState
 import com.localfix.app.ui.requestdetail.RequestDeliveryUiState
+import com.localfix.app.ui.requestdetail.ReviewDeliveryUiState
 import com.localfix.app.ui.requestdetail.ResidentReviewUiState
 import com.localfix.app.ui.requests.RequestFilter
 import com.localfix.app.ui.requests.RequestStatusTone
@@ -100,7 +101,16 @@ class ResidentViewModel(
 
     fun openRequest(ticketId: String) {
         if (reviewState.value.ticketId != ticketId) {
-            reviewState.value = ResidentReviewState(ticketId = ticketId)
+            val request = repository.residentData.value.requests.find { it.id == ticketId }
+            reviewState.value = ResidentReviewState(
+                ticketId = ticketId,
+                selectedDecision = request?.pendingReviewDecision,
+                rating = request?.residentRating.takeIf {
+                    request?.pendingReviewDecision == ResidentReviewDecision.CONFIRM
+                },
+                feedback = request?.residentFeedback.orEmpty(),
+                submissionError = request?.reviewFailureMessage,
+            )
         }
         if (deliveryActionState.value.ticketId != ticketId) {
             deliveryActionState.value = DeliveryActionState(ticketId = ticketId)
@@ -471,7 +481,8 @@ private fun createResidentUiState(
                     request.status != TicketStatus.AWAITING_CONFIRMATION
             },
             awaitingConfirmationCount = data.requests.count { request ->
-                request.status == TicketStatus.AWAITING_CONFIRMATION
+                request.status == TicketStatus.AWAITING_CONFIRMATION &&
+                    request.reviewDeliveryState != RequestDeliveryState.PENDING
             },
             activeRequest = activeRequest?.let { request ->
                 MaintenanceRequestSummary(
@@ -566,9 +577,18 @@ private fun MaintenanceRequest.toDetailUiState(
         completionPhotoUrl = completionPhotoUrl,
         residentRating = residentRating,
         residentFeedback = residentFeedback,
-        canReview = status == TicketStatus.AWAITING_CONFIRMATION,
+        canReview = status == TicketStatus.AWAITING_CONFIRMATION &&
+            reviewDeliveryState != RequestDeliveryState.PENDING,
         delivery = toDeliveryUiState(deliveryActionState),
-        review = reviewState?.toUiState() ?: ResidentReviewUiState(),
+        reviewDelivery = toReviewDeliveryUiState(),
+        review = reviewState?.toUiState() ?: ResidentReviewUiState(
+            selectedDecision = pendingReviewDecision,
+            rating = residentRating.takeIf {
+                pendingReviewDecision == ResidentReviewDecision.CONFIRM
+            },
+            feedback = residentFeedback.orEmpty(),
+            submissionError = reviewFailureMessage,
+        ),
     )
 
 private fun MaintenanceRequest.toDeliveryUiState(
@@ -590,6 +610,22 @@ private fun MaintenanceRequest.toDeliveryUiState(
         actionError = actionState?.actionError,
     )
 }
+
+private fun MaintenanceRequest.toReviewDeliveryUiState(): ReviewDeliveryUiState? =
+    when (reviewDeliveryState) {
+        RequestDeliveryState.SYNCED -> null
+        RequestDeliveryState.PENDING -> ReviewDeliveryUiState(
+            title = "Review waiting to send",
+            message = "Your review is saved on this device and will send automatically when connected.",
+            isFailure = false,
+        )
+        RequestDeliveryState.FAILED -> ReviewDeliveryUiState(
+            title = "Review wasn't sent",
+            message = reviewFailureMessage
+                ?: "Check the latest request, update your review if needed, and submit it again.",
+            isFailure = true,
+        )
+    }
 
 private data class ResidentReviewState(
     val ticketId: String? = null,

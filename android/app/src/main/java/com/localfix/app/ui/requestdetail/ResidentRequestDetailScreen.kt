@@ -51,7 +51,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
-import com.localfix.app.data.resident.ResidentReviewDecision
+import com.localfix.app.data.model.ResidentReviewDecision
 import com.localfix.app.ui.components.RequestStatusBadge
 import com.localfix.app.ui.requests.RequestStatusTone
 import com.localfix.app.ui.theme.LocalFixRadius
@@ -196,6 +196,9 @@ fun ResidentRequestDetailScreen(
                 }
             }
         }
+        uiState.reviewDelivery?.let { reviewDelivery ->
+            item { ReviewDeliverySection(reviewDelivery) }
+        }
         if (uiState.canReview) {
             item {
                 ResidentReviewForm(
@@ -211,6 +214,27 @@ fun ResidentRequestDetailScreen(
         }
         item {
             Spacer(modifier = Modifier.height(LocalFixSpacing.extraLarge))
+        }
+    }
+}
+
+@Composable
+private fun ReviewDeliverySection(delivery: ReviewDeliveryUiState) {
+    DetailSection(title = "Review delivery") {
+        DetailRow(
+            icon = Icons.Outlined.CloudQueue,
+            label = delivery.title,
+            value = delivery.message,
+        )
+        if (delivery.isFailure) {
+            Text(
+                text = "Your previous choices are still filled in below.",
+                modifier = Modifier
+                    .padding(top = LocalFixSpacing.small)
+                    .testTag("resident-review-delivery-failed"),
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
     }
 }

@@ -62,3 +62,38 @@ val MIGRATION_4_5 = Migration(4, 5) { database ->
         """.trimIndent(),
     )
 }
+
+val MIGRATION_5_6 = Migration(5, 6) { database ->
+    database.execSQL(
+        """
+        CREATE TABLE IF NOT EXISTS pending_resident_reviews (
+            ticketId TEXT NOT NULL PRIMARY KEY,
+            expectedVersion INTEGER NOT NULL,
+            decision TEXT NOT NULL,
+            rating INTEGER,
+            feedback TEXT,
+            deliveryState TEXT NOT NULL,
+            failureMessage TEXT,
+            queuedAt TEXT NOT NULL
+        )
+        """.trimIndent(),
+    )
+}
+
+val MIGRATION_6_7 = Migration(6, 7) { database ->
+    database.execSQL(
+        """
+        CREATE TABLE IF NOT EXISTS pending_ticket_commands (
+            ticketId TEXT NOT NULL,
+            commandType TEXT NOT NULL,
+            expectedVersion INTEGER NOT NULL,
+            priority TEXT,
+            workerId TEXT,
+            deliveryState TEXT NOT NULL,
+            failureMessage TEXT,
+            queuedAt TEXT NOT NULL,
+            PRIMARY KEY(ticketId, commandType)
+        )
+        """.trimIndent(),
+    )
+}

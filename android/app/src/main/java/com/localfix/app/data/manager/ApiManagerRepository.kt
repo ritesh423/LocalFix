@@ -1,16 +1,24 @@
 package com.localfix.app.data.manager
 
+import com.localfix.app.data.command.TicketCommandStore
+import com.localfix.app.data.command.TicketCommandSyncScheduler
+import com.localfix.app.data.local.PendingTicketCommandEntity
 import com.localfix.app.data.model.AccessWindow
+import com.localfix.app.data.model.RequestDeliveryState
 import com.localfix.app.data.model.ServiceCategory
+import com.localfix.app.data.model.TicketCommandType
 import com.localfix.app.data.model.TicketStatus
 import com.localfix.app.data.model.UrgencySuggestion
 import com.localfix.app.data.remote.ManagerTicketApi
-import com.localfix.app.data.remote.TicketAssignmentPayload
 import com.localfix.app.data.remote.TicketResponse
 import com.localfix.app.data.remote.WorkerResponse
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import java.time.Clock
 import java.time.Duration
@@ -18,14 +26,21 @@ import java.time.Instant
 
 class ApiManagerRepository(
     private val ticketApi: ManagerTicketApi,
+    private val commandStore: TicketCommandStore,
+    private val commandSyncScheduler: TicketCommandSyncScheduler,
+    applicationScope: CoroutineScope,
     private val clock: Clock = Clock.systemUTC(),
 ) : ManagerRepository {
-    private val mutableManagerData = MutableStateFlow(emptyManagerData())
+    private val serverData = MutableStateFlow(emptyManagerData())
     private val mutableSyncState =
         MutableStateFlow<ManagerSyncState>(ManagerSyncState.InitialLoading)
     private var hasLoaded = false
 
-    override val managerData: StateFlow<ManagerData> = mutableManagerData.asStateFlow()
+    override val managerData: StateFlow<ManagerData> = combine(
+        serverData,
+        commandStore.observeCommands(),
+    ) { data, commands -> data.withPendingAssignments(commands) }
+        .stateIn(applicationScope, SharingStarted.Eagerly, emptyManagerData())
     override val syncState: StateFlow<ManagerSyncState> = mutableSyncState.asStateFlow()
 
     override suspend fun refresh() {
@@ -37,7 +52,7 @@ class ApiManagerRepository(
         runCatching {
             ticketApi.listManagerTickets() to ticketApi.listManagerWorkers()
         }.onSuccess { (tickets, workers) ->
-            mutableManagerData.update { data ->
+            serverData.update { data ->
                 data.copy(
                     tickets = tickets.map { it.toManagerTicket(clock) },
                     workers = workers.map(WorkerResponse::toManagerWorker),
@@ -59,22 +74,48 @@ class ApiManagerRepository(
         priority: ManagerPriority,
         workerId: String,
     ): ManagerTicket {
-        val assigned = ticketApi.assignTicket(
+        val command = PendingTicketCommandEntity(
             ticketId = ticketId,
-            request = TicketAssignmentPayload(
-                expectedVersion = expectedVersion,
-                priority = priority.name.lowercase(),
-                workerId = workerId,
-            ),
-        ).toManagerTicket(clock)
-        mutableManagerData.update { data ->
+            commandType = TicketCommandType.ASSIGN,
+            expectedVersion = expectedVersion,
+            priority = priority.name.lowercase(),
+            workerId = workerId,
+            deliveryState = RequestDeliveryState.PENDING,
+            failureMessage = null,
+            queuedAt = clock.instant().toString(),
+        )
+        commandStore.queue(command)
+        runCatching {
+            commandSyncScheduler.schedule(
+                ticketId = ticketId,
+                commandType = TicketCommandType.ASSIGN,
+                replaceExisting = true,
+            )
+        }.onFailure {
+            commandStore.markFailed(
+                ticketId,
+                TicketCommandType.ASSIGN,
+                "This assignment is saved, but its retry could not be scheduled.",
+            )
+        }.getOrThrow()
+        val current = requireNotNull(serverData.value.tickets.find { it.id == ticketId })
+        return current.copy(
+            priority = priority,
+            assignedWorkerId = workerId,
+            assignedWorker = serverData.value.workers.find { it.id == workerId }?.name,
+            commandDeliveryState = RequestDeliveryState.PENDING,
+        )
+    }
+
+    fun acceptSyncedTicket(ticket: TicketResponse) {
+        val assigned = ticket.toManagerTicket(clock)
+        serverData.update { data ->
             data.copy(
                 tickets = data.tickets.map { existing ->
                     if (existing.id == assigned.id) assigned else existing
                 },
             )
         }
-        return assigned
     }
 
     private companion object {
@@ -87,6 +128,26 @@ class ApiManagerRepository(
             workers = emptyList(),
         )
     }
+}
+
+private fun ManagerData.withPendingAssignments(
+    commands: List<PendingTicketCommandEntity>,
+): ManagerData {
+    val assignments = commands
+        .filter { it.commandType == TicketCommandType.ASSIGN }
+        .associateBy(PendingTicketCommandEntity::ticketId)
+    return copy(
+        tickets = tickets.map { ticket ->
+            val command = assignments[ticket.id] ?: return@map ticket
+            ticket.copy(
+                priority = command.priority?.let { ManagerPriority.valueOf(it.uppercase()) },
+                assignedWorkerId = command.workerId,
+                assignedWorker = workers.find { it.id == command.workerId }?.name,
+                commandDeliveryState = command.deliveryState,
+                commandFailureMessage = command.failureMessage,
+            )
+        },
+    )
 }
 
 private fun TicketResponse.toManagerTicket(clock: Clock): ManagerTicket = ManagerTicket(

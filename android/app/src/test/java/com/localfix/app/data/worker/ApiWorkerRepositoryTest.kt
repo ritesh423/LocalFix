@@ -1,6 +1,10 @@
 package com.localfix.app.data.worker
 
+import com.localfix.app.data.command.InMemoryTicketCommandStore
+import com.localfix.app.data.command.TicketCommandSyncScheduler
+import com.localfix.app.data.model.RequestDeliveryState
 import com.localfix.app.data.model.ServiceCategory
+import com.localfix.app.data.model.TicketCommandType
 import com.localfix.app.data.model.TicketStatus
 import com.localfix.app.data.remote.TicketResponse
 import com.localfix.app.data.remote.TicketEventResponse
@@ -12,11 +16,14 @@ import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class ApiWorkerRepositoryTest {
     private val clock = Clock.fixed(
         Instant.parse("2026-08-16T10:15:00Z"),
@@ -25,9 +32,10 @@ class ApiWorkerRepositoryTest {
 
     @Test
     fun refreshMapsAssignedBackendTicketsIntoWorkerJobs() = runTest {
-        val repository = ApiWorkerRepository(FakeWorkerApi(), clock)
+        val repository = repository(FakeWorkerApi(), backgroundScope)
 
         repository.refresh()
+        runCurrent()
 
         val job = repository.workerData.value.jobs.single()
         assertEquals("Apartment A-204", job.unitLabel)
@@ -39,25 +47,37 @@ class ApiWorkerRepositoryTest {
     }
 
     @Test
-    fun startingAJobSendsItsVersionAndUpdatesTheLocalQueue() = runTest {
+    fun startingAJobIsSavedAndScheduledBeforeAnyNetworkCall() = runTest {
         val api = FakeWorkerApi()
-        val repository = ApiWorkerRepository(api, clock)
+        val store = InMemoryTicketCommandStore()
+        val scheduler = FakeCommandScheduler()
+        val repository = ApiWorkerRepository(
+            api,
+            store,
+            scheduler,
+            backgroundScope,
+            clock,
+        )
         repository.refresh()
+        runCurrent()
 
         repository.startJob(TICKET_ID, expectedVersion = 2)
+        runCurrent()
 
-        assertEquals(TicketStartPayload(expectedVersion = 2), api.lastStartPayload)
+        assertEquals(null, api.lastStartPayload)
+        assertEquals(2, store.getCommand(TICKET_ID, TicketCommandType.START)?.expectedVersion)
+        assertEquals(listOf(TICKET_ID), scheduler.ticketIds)
         val job = repository.workerData.value.jobs.single()
-        assertEquals(TicketStatus.IN_PROGRESS, job.status)
-        assertEquals(3, job.version)
-        assertEquals("Updated just now", job.updatedLabel)
+        assertEquals(TicketStatus.ASSIGNED, job.status)
+        assertEquals(RequestDeliveryState.PENDING, job.startDeliveryState)
     }
 
     @Test
     fun completionSendsStructuredEvidenceAndUpdatesTheJob() = runTest {
         val api = FakeWorkerApi()
-        val repository = ApiWorkerRepository(api, clock)
+        val repository = repository(api, backgroundScope)
         repository.refresh()
+        runCurrent()
 
         repository.submitCompletion(
             ticketId = TICKET_ID,
@@ -66,6 +86,7 @@ class ApiWorkerRepositoryTest {
             partsUsed = listOf("Rubber washer"),
             photoUri = "content://localfix/completion-photo",
         )
+        runCurrent()
 
         assertEquals(
             TicketCompletionPayload(
@@ -86,6 +107,9 @@ class ApiWorkerRepositoryTest {
     fun failedFirstRefreshShowsAnErrorWithoutInventingJobs() = runTest {
         val repository = ApiWorkerRepository(
             ticketApi = FakeWorkerApi(listFailure = IOException("offline")),
+            commandStore = InMemoryTicketCommandStore(),
+            commandSyncScheduler = FakeCommandScheduler(),
+            applicationScope = backgroundScope,
             clock = clock,
         )
 
@@ -98,8 +122,9 @@ class ApiWorkerRepositoryTest {
 
     @Test
     fun reworkReasonAndImmutableHistoryAreMappedForTheWorker() = runTest {
-        val repository = ApiWorkerRepository(FakeWorkerApi(), clock)
+        val repository = repository(FakeWorkerApi(), backgroundScope)
         repository.refresh()
+        runCurrent()
 
         val history = repository.loadJobHistory(TICKET_ID)
 
@@ -110,6 +135,29 @@ class ApiWorkerRepositoryTest {
         assertEquals("Resident requested more work", history.single().title)
         assertEquals("Ready to start", history.single().statusLabel)
         assertEquals(5, history.single().ticketVersion)
+    }
+
+    private fun repository(
+        api: WorkerTicketApi,
+        scope: kotlinx.coroutines.CoroutineScope,
+    ) = ApiWorkerRepository(
+        ticketApi = api,
+        commandStore = InMemoryTicketCommandStore(),
+        commandSyncScheduler = FakeCommandScheduler(),
+        applicationScope = scope,
+        clock = clock,
+    )
+
+    private class FakeCommandScheduler : TicketCommandSyncScheduler {
+        val ticketIds = mutableListOf<String>()
+
+        override fun schedule(
+            ticketId: String,
+            commandType: TicketCommandType,
+            replaceExisting: Boolean,
+        ) {
+            ticketIds += ticketId
+        }
     }
 
     private class FakeWorkerApi(

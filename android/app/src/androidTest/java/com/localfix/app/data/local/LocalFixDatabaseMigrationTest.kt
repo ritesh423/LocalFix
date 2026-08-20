@@ -156,4 +156,74 @@ class LocalFixDatabaseMigrationTest {
             assertEquals(0, cursor.getInt(0))
         }
     }
+
+    @Test
+    fun migrationFromFiveToSixKeepsRequestQueueAndAddsReviewQueue() {
+        val databaseName = "localfix-migration-five-six-test.db"
+        migrationHelper.createDatabase(databaseName, 5).apply {
+            execSQL(
+                """
+                INSERT INTO pending_resident_requests
+                    (clientRequestId, title, description, category, urgencySuggestion,
+                     accessWindow, photoUri, deliveryState, failureMessage, queuedAt)
+                VALUES
+                    ('50000000-0000-0000-0000-000000000004', 'Leaking tap',
+                     'Water is dripping below the sink.', 'PLUMBING', 'SOON',
+                     'MORNING', NULL, 'PENDING', NULL, '2026-08-18T10:00:00Z')
+                """.trimIndent(),
+            )
+            close()
+        }
+
+        val migratedDatabase = migrationHelper.runMigrationsAndValidate(
+            databaseName,
+            6,
+            true,
+            MIGRATION_5_6,
+        )
+
+        migratedDatabase.query("SELECT title FROM pending_resident_requests").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("Leaking tap", cursor.getString(0))
+        }
+        migratedDatabase.query("SELECT COUNT(*) FROM pending_resident_reviews").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(0, cursor.getInt(0))
+        }
+    }
+
+    @Test
+    fun migrationFromSixToSevenKeepsReviewQueueAndAddsSharedCommandQueue() {
+        val databaseName = "localfix-migration-six-seven-test.db"
+        migrationHelper.createDatabase(databaseName, 6).apply {
+            execSQL(
+                """
+                INSERT INTO pending_resident_reviews
+                    (ticketId, expectedVersion, decision, rating, feedback,
+                     deliveryState, failureMessage, queuedAt)
+                VALUES
+                    ('90000000-0000-0000-0000-000000000001', 4, 'CONFIRM', 5,
+                     'The repair works properly now.', 'PENDING', NULL,
+                     '2026-08-18T10:00:00Z')
+                """.trimIndent(),
+            )
+            close()
+        }
+
+        val migratedDatabase = migrationHelper.runMigrationsAndValidate(
+            databaseName,
+            7,
+            true,
+            MIGRATION_6_7,
+        )
+
+        migratedDatabase.query("SELECT rating FROM pending_resident_reviews").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(5, cursor.getInt(0))
+        }
+        migratedDatabase.query("SELECT COUNT(*) FROM pending_ticket_commands").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(0, cursor.getInt(0))
+        }
+    }
 }

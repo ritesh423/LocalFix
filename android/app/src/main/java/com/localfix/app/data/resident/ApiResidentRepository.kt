@@ -5,13 +5,14 @@ import com.localfix.app.data.model.NewMaintenanceRequest
 import com.localfix.app.data.model.ResidentAccount
 import com.localfix.app.data.model.ResidentData
 import com.localfix.app.data.model.RequestDeliveryState
+import com.localfix.app.data.model.ResidentReviewDecision
 import com.localfix.app.data.model.ServiceCategory
 import com.localfix.app.data.model.TicketStatus
 import com.localfix.app.data.local.PendingResidentRequestEntity
+import com.localfix.app.data.local.PendingResidentReviewEntity
 import com.localfix.app.data.local.ResidentRequestStore
 import com.localfix.app.data.local.ResidentTicketEntity
 import com.localfix.app.data.remote.TicketApi
-import com.localfix.app.data.remote.TicketReviewPayload
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,6 +28,7 @@ class ApiResidentRepository(
     private val residentRequestStore: ResidentRequestStore,
     private val pendingRequestSyncScheduler: PendingRequestSyncScheduler,
     applicationScope: CoroutineScope,
+    private val pendingReviewSyncScheduler: PendingReviewSyncScheduler,
     private val clock: Clock = Clock.systemUTC(),
 ) : ResidentRepository {
     private val mutableRequestSyncState =
@@ -35,10 +37,14 @@ class ApiResidentRepository(
     override val residentData: StateFlow<ResidentData> = combine(
         residentRequestStore.observeTickets(),
         residentRequestStore.observePendingRequests(),
-    ) { tickets, pendingRequests ->
+        residentRequestStore.observePendingReviews(),
+    ) { tickets, pendingRequests, pendingReviews ->
+        val reviewsByTicketId = pendingReviews.associateBy(PendingResidentReviewEntity::ticketId)
         emptyResidentData().copy(
             requests = pendingRequests.map { it.toMaintenanceRequest() } +
-                tickets.map { it.toMaintenanceRequest(ticketApi, clock) },
+                tickets.map { ticket ->
+                    ticket.toMaintenanceRequest(ticketApi, clock, reviewsByTicketId[ticket.id])
+                },
         )
     }
         .stateIn(
@@ -113,16 +119,26 @@ class ApiResidentRepository(
         rating: Int?,
         feedback: String?,
     ) {
-        val reviewed = ticketApi.reviewTicket(
-            ticketId = ticketId,
-            request = TicketReviewPayload(
+        residentRequestStore.queueReview(
+            PendingResidentReviewEntity(
+                ticketId = ticketId,
                 expectedVersion = expectedVersion,
-                decision = decision.name.lowercase(),
+                decision = decision,
                 rating = rating,
                 feedback = feedback,
+                deliveryState = RequestDeliveryState.PENDING,
+                failureMessage = null,
+                queuedAt = clock.instant().toString(),
             ),
         )
-        residentRequestStore.upsertTicket(reviewed.toResidentTicketEntity())
+        runCatching {
+            pendingReviewSyncScheduler.schedule(ticketId, replaceExisting = true)
+        }.onFailure {
+            residentRequestStore.markReviewFailed(
+                ticketId,
+                "This review is saved, but its retry could not be scheduled.",
+            )
+        }
     }
 
     private companion object {
@@ -146,6 +162,7 @@ class ApiResidentRepository(
 private fun ResidentTicketEntity.toMaintenanceRequest(
     ticketApi: TicketApi,
     clock: Clock,
+    pendingReview: PendingResidentReviewEntity?,
 ): MaintenanceRequest =
     MaintenanceRequest(
         id = id,
@@ -161,8 +178,11 @@ private fun ResidentTicketEntity.toMaintenanceRequest(
         completionNote = completionNote,
         partsUsed = partsUsed,
         completionPhotoUrl = if (hasCompletionPhoto) ticketApi.completionPhotoUrl(id) else null,
-        residentRating = residentRating,
-        residentFeedback = residentFeedback,
+        residentRating = pendingReview?.rating ?: residentRating,
+        residentFeedback = pendingReview?.feedback ?: residentFeedback,
+        reviewDeliveryState = pendingReview?.deliveryState ?: RequestDeliveryState.SYNCED,
+        pendingReviewDecision = pendingReview?.decision,
+        reviewFailureMessage = pendingReview?.failureMessage,
     )
 
 private fun PendingResidentRequestEntity.toMaintenanceRequest(): MaintenanceRequest =

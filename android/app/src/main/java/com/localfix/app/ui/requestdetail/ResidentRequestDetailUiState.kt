@@ -1,6 +1,6 @@
 package com.localfix.app.ui.requestdetail
 
-import com.localfix.app.data.resident.ResidentReviewDecision
+import com.localfix.app.data.model.ResidentReviewDecision
 import com.localfix.app.ui.requests.RequestStatusTone
 
 data class ResidentRequestDetailUiState(
@@ -23,6 +23,7 @@ data class ResidentRequestDetailUiState(
     val residentFeedback: String?,
     val canReview: Boolean,
     val delivery: RequestDeliveryUiState?,
+    val reviewDelivery: ReviewDeliveryUiState? = null,
     val review: ResidentReviewUiState,
 )
 
@@ -33,6 +34,12 @@ data class RequestDeliveryUiState(
     val canDiscard: Boolean,
     val isWorking: Boolean = false,
     val actionError: String? = null,
+)
+
+data class ReviewDeliveryUiState(
+    val title: String,
+    val message: String,
+    val isFailure: Boolean,
 )
 
 data class ResidentReviewUiState(

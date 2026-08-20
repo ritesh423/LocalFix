@@ -3,6 +3,7 @@ package com.localfix.app.data.manager
 import com.localfix.app.data.model.AccessWindow
 import com.localfix.app.data.model.ServiceCategory
 import com.localfix.app.data.model.TicketStatus
+import com.localfix.app.data.model.RequestDeliveryState
 import com.localfix.app.data.model.UrgencySuggestion
 
 data class ManagerData(
@@ -26,6 +27,8 @@ data class ManagerTicket(
     val assignedWorkerId: String?,
     val assignedWorker: String?,
     val updatedLabel: String,
+    val commandDeliveryState: RequestDeliveryState = RequestDeliveryState.SYNCED,
+    val commandFailureMessage: String? = null,
 )
 
 data class ManagerWorker(

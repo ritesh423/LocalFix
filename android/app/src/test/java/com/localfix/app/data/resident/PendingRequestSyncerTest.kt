@@ -1,6 +1,7 @@
 package com.localfix.app.data.resident
 
 import com.localfix.app.data.local.PendingResidentRequestEntity
+import com.localfix.app.data.local.PendingResidentReviewEntity
 import com.localfix.app.data.local.ResidentRequestStore
 import com.localfix.app.data.local.ResidentTicketEntity
 import com.localfix.app.data.model.AccessWindow
@@ -88,10 +89,14 @@ class PendingRequestSyncerTest {
     ) : ResidentRequestStore {
         val tickets = MutableStateFlow<List<ResidentTicketEntity>>(emptyList())
         private val pending = MutableStateFlow(listOf(pendingRequest))
+        private val pendingReviews = MutableStateFlow<List<PendingResidentReviewEntity>>(emptyList())
 
         override fun observeTickets(): Flow<List<ResidentTicketEntity>> = tickets
 
         override fun observePendingRequests(): Flow<List<PendingResidentRequestEntity>> = pending
+
+        override fun observePendingReviews(): Flow<List<PendingResidentReviewEntity>> =
+            pendingReviews
 
         override suspend fun hasLocalRequests(): Boolean = pending.value.isNotEmpty()
 
@@ -104,6 +109,11 @@ class PendingRequestSyncerTest {
         override suspend fun getRetryableRequestIds(): List<String> = pending.value.map {
             it.clientRequestId
         }
+
+        override suspend fun getPendingReview(ticketId: String): PendingResidentReviewEntity? =
+            pendingReviews.value.find { it.ticketId == ticketId }
+
+        override suspend fun getRetryableReviewIds(): List<String> = emptyList()
 
         override suspend fun queueRequest(request: PendingResidentRequestEntity) {
             pending.value = listOf(request)
@@ -136,6 +146,12 @@ class PendingRequestSyncerTest {
             pending.value = pending.value.filterNot { it.clientRequestId == clientRequestId }
         }
 
+        override suspend fun queueReview(review: PendingResidentReviewEntity) {
+            pendingReviews.value = listOf(review)
+        }
+
+        override suspend fun markReviewFailed(ticketId: String, message: String) = Unit
+
         override suspend fun upsertTicket(ticket: ResidentTicketEntity) {
             tickets.value = listOf(ticket)
         }
@@ -146,6 +162,14 @@ class PendingRequestSyncerTest {
         ) {
             tickets.value = listOf(ticket)
             pending.value = pending.value.filterNot { it.clientRequestId == clientRequestId }
+        }
+
+        override suspend fun completePendingReview(
+            ticketId: String,
+            ticket: ResidentTicketEntity,
+        ) {
+            tickets.value = listOf(ticket)
+            pendingReviews.value = pendingReviews.value.filterNot { it.ticketId == ticketId }
         }
 
         override suspend fun replaceServerSnapshot(

@@ -11,6 +11,7 @@ import com.localfix.app.data.manager.ManagerRepository
 import com.localfix.app.data.manager.ManagerSyncState
 import com.localfix.app.data.manager.ManagerTicket
 import com.localfix.app.data.model.AccessWindow
+import com.localfix.app.data.model.RequestDeliveryState
 import com.localfix.app.data.model.TicketStatus
 import com.localfix.app.data.model.UrgencySuggestion
 import com.localfix.app.ui.components.RequestLoadUiState
@@ -53,7 +54,17 @@ class ManagerViewModel(
     }
 
     fun openTicket(ticketId: String) {
-        selection.value = ManagerSelection(ticketId = ticketId)
+        val ticket = repository.managerData.value.tickets.find { it.id == ticketId }
+        selection.value = ManagerSelection(
+            ticketId = ticketId,
+            priority = ticket?.priority.takeIf {
+                ticket?.commandDeliveryState == RequestDeliveryState.FAILED
+            },
+            workerId = ticket?.assignedWorkerId.takeIf {
+                ticket?.commandDeliveryState == RequestDeliveryState.FAILED
+            },
+            errorMessage = ticket?.commandFailureMessage,
+        )
     }
 
     fun selectPriority(priority: ManagerPriority) {
@@ -135,7 +146,10 @@ private fun createManagerUiState(
     return ManagerUiState(
         queue = ManagerQueueUiState(
             propertyName = data.propertyName,
-            needsAssignmentCount = data.tickets.count { it.status == TicketStatus.OPEN },
+            needsAssignmentCount = data.tickets.count {
+                it.status == TicketStatus.OPEN &&
+                    it.commandDeliveryState != RequestDeliveryState.PENDING
+            },
             assignedCount = data.tickets.count { it.status == TicketStatus.ASSIGNED },
             tickets = data.tickets.map(ManagerTicket::toQueueItem),
             loadState = syncState.toLoadUiState(data.tickets.isNotEmpty()),
@@ -182,8 +196,16 @@ private fun ManagerTicket.toQueueItem() = ManagerTicketItem(
     title = title,
     categoryLabel = category.label,
     urgencyLabel = urgencySuggestion.label,
-    statusLabel = status.label,
-    statusTone = status.tone,
+    statusLabel = when (commandDeliveryState) {
+        RequestDeliveryState.PENDING -> "Assignment waiting to send"
+        RequestDeliveryState.FAILED -> "Assignment failed"
+        RequestDeliveryState.SYNCED -> status.label
+    },
+    statusTone = when (commandDeliveryState) {
+        RequestDeliveryState.PENDING -> RequestStatusTone.NEUTRAL
+        RequestDeliveryState.FAILED -> RequestStatusTone.ATTENTION
+        RequestDeliveryState.SYNCED -> status.tone
+    },
     assignedWorker = assignedWorker,
     updatedLabel = updatedLabel,
 )
@@ -199,7 +221,8 @@ private fun ManagerTicket.toAssignmentTicket() = ManagerAssignmentTicket(
     accessWindowLabel = accessWindow.label,
     statusLabel = status.label,
     assignedWorker = assignedWorker,
-    canBeAssigned = status == TicketStatus.OPEN,
+    canBeAssigned = status == TicketStatus.OPEN &&
+        commandDeliveryState != RequestDeliveryState.PENDING,
     version = version,
 )
 

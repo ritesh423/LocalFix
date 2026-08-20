@@ -1,12 +1,18 @@
 package com.localfix.app.data.manager
 
+import com.localfix.app.data.command.InMemoryTicketCommandStore
+import com.localfix.app.data.command.TicketCommandSyncScheduler
+import com.localfix.app.data.model.RequestDeliveryState
 import com.localfix.app.data.model.ServiceCategory
+import com.localfix.app.data.model.TicketCommandType
 import com.localfix.app.data.model.TicketStatus
 import com.localfix.app.data.remote.ManagerTicketApi
 import com.localfix.app.data.remote.TicketAssignmentPayload
 import com.localfix.app.data.remote.TicketResponse
 import com.localfix.app.data.remote.WorkerResponse
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -16,6 +22,7 @@ import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class ApiManagerRepositoryTest {
     private val clock = Clock.fixed(
         Instant.parse("2026-08-16T10:15:00Z"),
@@ -24,9 +31,16 @@ class ApiManagerRepositoryTest {
 
     @Test
     fun refreshMapsThePropertyQueueAndEligibleWorkers() = runTest {
-        val repository = ApiManagerRepository(FakeManagerApi(), clock)
+        val repository = ApiManagerRepository(
+            FakeManagerApi(),
+            InMemoryTicketCommandStore(),
+            FakeCommandScheduler(),
+            backgroundScope,
+            clock,
+        )
 
         repository.refresh()
+        runCurrent()
 
         val data = repository.managerData.value
         assertEquals("Apartment A-204", data.tickets.single().unitLabel)
@@ -37,9 +51,17 @@ class ApiManagerRepositoryTest {
     }
 
     @Test
-    fun assignmentSendsVersionPriorityAndTrustedWorkerIdThenUpdatesQueue() = runTest {
+    fun assignmentIsSavedAndScheduledBeforeAnyNetworkCall() = runTest {
         val api = FakeManagerApi()
-        val repository = ApiManagerRepository(api, clock)
+        val store = InMemoryTicketCommandStore()
+        val scheduler = FakeCommandScheduler()
+        val repository = ApiManagerRepository(
+            api,
+            store,
+            scheduler,
+            backgroundScope,
+            clock,
+        )
         repository.refresh()
 
         repository.assignTicket(
@@ -48,25 +70,27 @@ class ApiManagerRepositoryTest {
             priority = ManagerPriority.SOON,
             workerId = WORKER_ID,
         )
+        runCurrent()
 
-        assertEquals(
-            TicketAssignmentPayload(
-                expectedVersion = 1,
-                priority = "soon",
-                workerId = WORKER_ID,
-            ),
-            api.lastAssignment,
-        )
+        assertEquals(null, api.lastAssignment)
+        val command = store.getCommand(TICKET_ID, TicketCommandType.ASSIGN)
+        assertEquals(1, command?.expectedVersion)
+        assertEquals("soon", command?.priority)
+        assertEquals(WORKER_ID, command?.workerId)
+        assertEquals(listOf(TICKET_ID), scheduler.ticketIds)
         val assigned = repository.managerData.value.tickets.single()
-        assertEquals(TicketStatus.ASSIGNED, assigned.status)
+        assertEquals(TicketStatus.OPEN, assigned.status)
         assertEquals("Arun Kumar", assigned.assignedWorker)
-        assertEquals(2, assigned.version)
+        assertEquals(RequestDeliveryState.PENDING, assigned.commandDeliveryState)
     }
 
     @Test
     fun failedFirstRefreshBecomesVisibleWithoutFakeQueueData() = runTest {
         val repository = ApiManagerRepository(
             ticketApi = FakeManagerApi(listFailure = IOException("offline")),
+            commandStore = InMemoryTicketCommandStore(),
+            commandSyncScheduler = FakeCommandScheduler(),
+            applicationScope = backgroundScope,
             clock = clock,
         )
 
@@ -75,6 +99,18 @@ class ApiManagerRepositoryTest {
         val state = repository.syncState.value as ManagerSyncState.Error
         assertFalse(state.hasPreviousResult)
         assertTrue(repository.managerData.value.tickets.isEmpty())
+    }
+
+    private class FakeCommandScheduler : TicketCommandSyncScheduler {
+        val ticketIds = mutableListOf<String>()
+
+        override fun schedule(
+            ticketId: String,
+            commandType: TicketCommandType,
+            replaceExisting: Boolean,
+        ) {
+            ticketIds += ticketId
+        }
     }
 
     private class FakeManagerApi(

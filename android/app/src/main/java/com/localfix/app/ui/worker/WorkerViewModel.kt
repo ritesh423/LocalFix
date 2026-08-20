@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.localfix.app.data.model.AccessWindow
+import com.localfix.app.data.model.RequestDeliveryState
 import com.localfix.app.data.model.TicketStatus
 import com.localfix.app.data.model.UrgencySuggestion
 import com.localfix.app.data.worker.WorkerData
@@ -51,9 +52,11 @@ class WorkerViewModel(
     }
 
     fun openJob(ticketId: String) {
+        val job = repository.workerData.value.jobs.find { it.id == ticketId }
         selection.value = WorkerSelection(
             ticketId = ticketId,
             isHistoryLoading = true,
+            startError = job?.startFailureMessage,
         )
         viewModelScope.launch { loadJobHistory(ticketId) }
     }
@@ -71,11 +74,12 @@ class WorkerViewModel(
                     ticketId = job.id,
                     expectedVersion = job.version,
                 )
-            }.onSuccess {
+            }.onSuccess { startedJob ->
+                val wasQueued = startedJob.startDeliveryState == RequestDeliveryState.PENDING
                 selection.update { current ->
-                    current.copy(isStarting = false, hasJustStarted = true)
+                    current.copy(isStarting = false, hasJustStarted = !wasQueued)
                 }
-                loadJobHistory(job.id)
+                if (!wasQueued) loadJobHistory(job.id)
             }.onFailure {
                 selection.update { current ->
                     current.copy(
@@ -257,7 +261,10 @@ private fun createWorkerUiState(
         queue = WorkerQueueUiState(
             workerName = data.workerName,
             propertyName = data.propertyName,
-            readyCount = data.jobs.count { it.status == TicketStatus.ASSIGNED },
+            readyCount = data.jobs.count {
+                it.status == TicketStatus.ASSIGNED &&
+                    it.startDeliveryState != RequestDeliveryState.PENDING
+            },
             inProgressCount = data.jobs.count { it.status == TicketStatus.IN_PROGRESS },
             jobs = data.jobs.map(WorkerJob::toQueueItem),
             loadState = syncState.toLoadUiState(data.jobs.isNotEmpty()),
@@ -310,8 +317,8 @@ private fun WorkerJob.toQueueItem() = WorkerJobItem(
     categoryLabel = category.label,
     priorityLabel = priorityLabel,
     accessWindowLabel = accessWindow.label,
-    statusLabel = status.label,
-    statusTone = status.tone,
+    statusLabel = startStatusLabel,
+    statusTone = startStatusTone,
     updatedLabel = updatedLabel,
 )
 
@@ -325,16 +332,32 @@ private fun WorkerJob.toDetail() = WorkerJobDetail(
     residentUrgencyLabel = urgencySuggestion.label,
     priorityLabel = priorityLabel,
     accessWindowLabel = accessWindow.label,
-    statusLabel = status.label,
-    statusTone = status.tone,
+    statusLabel = startStatusLabel,
+    statusTone = startStatusTone,
     version = version,
-    canStart = status == TicketStatus.ASSIGNED,
-    canSubmitCompletion = status == TicketStatus.IN_PROGRESS,
+    canStart = status == TicketStatus.ASSIGNED &&
+        startDeliveryState != RequestDeliveryState.PENDING,
+    canSubmitCompletion = status == TicketStatus.IN_PROGRESS &&
+        startDeliveryState == RequestDeliveryState.SYNCED,
     completionNote = completionNote,
     partsUsed = partsUsed,
     hasCompletionPhoto = hasCompletionPhoto,
     reworkReason = reworkReason,
 )
+
+private val WorkerJob.startStatusLabel: String
+    get() = when (startDeliveryState) {
+        RequestDeliveryState.PENDING -> "Waiting to start"
+        RequestDeliveryState.FAILED -> "Start failed"
+        RequestDeliveryState.SYNCED -> status.label
+    }
+
+private val WorkerJob.startStatusTone: RequestStatusTone
+    get() = when (startDeliveryState) {
+        RequestDeliveryState.PENDING -> RequestStatusTone.NEUTRAL
+        RequestDeliveryState.FAILED -> RequestStatusTone.ATTENTION
+        RequestDeliveryState.SYNCED -> status.tone
+    }
 
 private fun WorkerJobEvent.toUiState() = WorkerHistoryItem(
     id = id,

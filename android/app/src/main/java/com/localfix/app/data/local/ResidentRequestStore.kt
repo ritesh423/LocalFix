@@ -8,11 +8,17 @@ interface ResidentRequestStore {
 
     fun observePendingRequests(): Flow<List<PendingResidentRequestEntity>>
 
+    fun observePendingReviews(): Flow<List<PendingResidentReviewEntity>>
+
     suspend fun hasLocalRequests(): Boolean
 
     suspend fun getPendingRequest(clientRequestId: String): PendingResidentRequestEntity?
 
     suspend fun getRetryableRequestIds(): List<String>
+
+    suspend fun getPendingReview(ticketId: String): PendingResidentReviewEntity?
+
+    suspend fun getRetryableReviewIds(): List<String>
 
     suspend fun queueRequest(request: PendingResidentRequestEntity)
 
@@ -22,10 +28,19 @@ interface ResidentRequestStore {
 
     suspend fun discardFailedRequest(clientRequestId: String)
 
+    suspend fun queueReview(review: PendingResidentReviewEntity)
+
+    suspend fun markReviewFailed(ticketId: String, message: String)
+
     suspend fun upsertTicket(ticket: ResidentTicketEntity)
 
     suspend fun completePendingRequest(
         clientRequestId: String,
+        ticket: ResidentTicketEntity,
+    )
+
+    suspend fun completePendingReview(
+        ticketId: String,
         ticket: ResidentTicketEntity,
     )
 
@@ -38,6 +53,7 @@ interface ResidentRequestStore {
 class RoomResidentRequestStore(
     private val ticketDao: ResidentTicketDao,
     private val pendingRequestDao: PendingResidentRequestDao,
+    private val pendingReviewDao: PendingResidentReviewDao,
     private val syncDao: ResidentRequestSyncDao,
 ) : ResidentRequestStore {
     override fun observeTickets(): Flow<List<ResidentTicketEntity>> =
@@ -45,6 +61,9 @@ class RoomResidentRequestStore(
 
     override fun observePendingRequests(): Flow<List<PendingResidentRequestEntity>> =
         pendingRequestDao.observeRequests()
+
+    override fun observePendingReviews(): Flow<List<PendingResidentReviewEntity>> =
+        pendingReviewDao.observeReviews()
 
     override suspend fun hasLocalRequests(): Boolean =
         ticketDao.countTickets() > 0 || pendingRequestDao.countRequests() > 0
@@ -55,6 +74,12 @@ class RoomResidentRequestStore(
 
     override suspend fun getRetryableRequestIds(): List<String> =
         pendingRequestDao.getRetryableRequestIds()
+
+    override suspend fun getPendingReview(ticketId: String): PendingResidentReviewEntity? =
+        pendingReviewDao.getReview(ticketId)
+
+    override suspend fun getRetryableReviewIds(): List<String> =
+        pendingReviewDao.getRetryableReviewIds()
 
     override suspend fun queueRequest(request: PendingResidentRequestEntity) {
         pendingRequestDao.upsertRequest(request)
@@ -80,6 +105,18 @@ class RoomResidentRequestStore(
         pendingRequestDao.deleteRequest(clientRequestId)
     }
 
+    override suspend fun queueReview(review: PendingResidentReviewEntity) {
+        pendingReviewDao.upsertReview(review)
+    }
+
+    override suspend fun markReviewFailed(ticketId: String, message: String) {
+        pendingReviewDao.updateDeliveryState(
+            ticketId = ticketId,
+            deliveryState = RequestDeliveryState.FAILED,
+            message = message,
+        )
+    }
+
     override suspend fun upsertTicket(ticket: ResidentTicketEntity) {
         ticketDao.upsertTicket(ticket)
     }
@@ -89,6 +126,13 @@ class RoomResidentRequestStore(
         ticket: ResidentTicketEntity,
     ) {
         syncDao.completePendingRequest(clientRequestId, ticket)
+    }
+
+    override suspend fun completePendingReview(
+        ticketId: String,
+        ticket: ResidentTicketEntity,
+    ) {
+        syncDao.completePendingReview(ticketId, ticket)
     }
 
     override suspend fun replaceServerSnapshot(
