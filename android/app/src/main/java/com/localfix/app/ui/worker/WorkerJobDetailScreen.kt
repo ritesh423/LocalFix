@@ -53,6 +53,7 @@ import coil3.compose.AsyncImage
 import com.localfix.app.ui.components.RequestStatusBadge
 import com.localfix.app.ui.components.persistPhotoAccess
 import com.localfix.app.ui.components.releasePhotoAccess
+import com.localfix.app.data.model.RequestDeliveryState
 import com.localfix.app.ui.requests.RequestStatusTone
 import com.localfix.app.ui.theme.LocalFixRadius
 import com.localfix.app.ui.theme.LocalFixSpacing
@@ -197,6 +198,8 @@ fun WorkerJobDetailScreen(
                     }
                 }
             }
+        } else if (uiState.completionDeliveryState == RequestDeliveryState.PENDING) {
+            item { PendingCompletionCard() }
         } else if (job.canSubmitCompletion) {
             item {
                 Surface(
@@ -246,6 +249,29 @@ fun WorkerJobDetailScreen(
         }
         item { WorkerHistorySection(uiState) }
         item { Spacer(modifier = Modifier.height(LocalFixSpacing.extraLarge)) }
+    }
+}
+
+@Composable
+private fun PendingCompletionCard() {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(LocalFixSpacing.medium)
+            .testTag("worker-completion-pending"),
+        color = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        shape = RoundedCornerShape(LocalFixRadius.large),
+    ) {
+        Column(modifier = Modifier.padding(LocalFixSpacing.medium)) {
+            Text("Completion saved", style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = "The photo and repair details are waiting for a connection. " +
+                    "LocalFix will send them automatically.",
+                modifier = Modifier.padding(top = LocalFixSpacing.extraSmall),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
     }
 }
 

@@ -226,4 +226,40 @@ class LocalFixDatabaseMigrationTest {
             assertEquals(0, cursor.getInt(0))
         }
     }
+
+    @Test
+    fun migrationFromSevenToEightKeepsCommandsAndAddsCompletionEvidence() {
+        val databaseName = "localfix-migration-seven-eight-test.db"
+        migrationHelper.createDatabase(databaseName, 7).apply {
+            execSQL(
+                """
+                INSERT INTO pending_ticket_commands
+                    (ticketId, commandType, expectedVersion, priority, workerId,
+                     deliveryState, failureMessage, queuedAt)
+                VALUES
+                    ('90000000-0000-0000-0000-000000000001', 'START', 2, NULL, NULL,
+                     'PENDING', NULL, '2026-08-20T10:00:00Z')
+                """.trimIndent(),
+            )
+            close()
+        }
+
+        val migratedDatabase = migrationHelper.runMigrationsAndValidate(
+            databaseName,
+            8,
+            true,
+            MIGRATION_7_8,
+        )
+
+        migratedDatabase.query(
+            "SELECT commandType, completionNote, partsUsed, photoUri " +
+                "FROM pending_ticket_commands",
+        ).use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("START", cursor.getString(0))
+            assertTrue(cursor.isNull(1))
+            assertTrue(cursor.isNull(2))
+            assertTrue(cursor.isNull(3))
+        }
+    }
 }

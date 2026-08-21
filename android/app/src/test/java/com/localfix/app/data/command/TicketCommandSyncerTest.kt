@@ -68,6 +68,58 @@ class TicketCommandSyncerTest {
         assertNull(store.getCommand(TICKET_ID, TicketCommandType.START))
     }
 
+    @Test
+    fun completionUploadsSavedEvidenceAndReleasesThePhotoAfterSuccess() = runTest {
+        val command = completionCommand()
+        val store = InMemoryTicketCommandStore(listOf(command))
+        val api = FakeCommandApi(ticket = completedTicket())
+        var accepted: TicketResponse? = null
+        var releasedPhoto: String? = null
+        val syncer = TicketCommandSyncer(
+            managerApi = api,
+            workerApi = api,
+            store = store,
+            onAssignmentSynced = {},
+            onStartSynced = {},
+            onCompletionSynced = { accepted = it },
+            onCompletionPhotoReleased = { releasedPhoto = it },
+        )
+
+        val result = syncer.sync(TICKET_ID, TicketCommandType.COMPLETE)
+
+        assertEquals(PendingRequestSyncResult.SUCCESS, result)
+        assertEquals(command.completionNote, api.lastCompletion?.completionNote)
+        assertEquals(command.partsUsed, api.lastCompletion?.partsUsed)
+        assertEquals(command.photoUri, releasedPhoto)
+        assertEquals("awaiting_confirmation", accepted?.status)
+        assertNull(store.getCommand(TICKET_ID, TicketCommandType.COMPLETE))
+    }
+
+    @Test
+    fun offlineCompletionKeepsPhotoPermissionAndCommandForRetry() = runTest {
+        val command = completionCommand()
+        val store = InMemoryTicketCommandStore(listOf(command))
+        val api = FakeCommandApi(completionFailure = IOException("offline"))
+        var releasedPhoto: String? = null
+        val syncer = TicketCommandSyncer(
+            api,
+            api,
+            store,
+            {},
+            {},
+            onCompletionPhotoReleased = { releasedPhoto = it },
+        )
+
+        val result = syncer.sync(TICKET_ID, TicketCommandType.COMPLETE)
+
+        assertEquals(PendingRequestSyncResult.RETRY, result)
+        assertEquals(null, releasedPhoto)
+        assertEquals(
+            RequestDeliveryState.PENDING,
+            store.getCommand(TICKET_ID, TicketCommandType.COMPLETE)?.deliveryState,
+        )
+    }
+
     private fun assignmentCommand() = PendingTicketCommandEntity(
         ticketId = TICKET_ID,
         commandType = TicketCommandType.ASSIGN,
@@ -90,6 +142,20 @@ class TicketCommandSyncerTest {
         queuedAt = "2026-08-18T11:00:00Z",
     )
 
+    private fun completionCommand() = PendingTicketCommandEntity(
+        ticketId = TICKET_ID,
+        commandType = TicketCommandType.COMPLETE,
+        expectedVersion = 3,
+        priority = null,
+        workerId = null,
+        completionNote = "Replaced the washer and tested the tap.",
+        partsUsed = listOf("Rubber washer"),
+        photoUri = "content://localfix/completion-photo",
+        deliveryState = RequestDeliveryState.PENDING,
+        failureMessage = null,
+        queuedAt = "2026-08-18T11:00:00Z",
+    )
+
     private fun assignedTicket() = baseTicket().copy(
         status = "assigned",
         version = 2,
@@ -99,6 +165,14 @@ class TicketCommandSyncerTest {
     )
 
     private fun startedTicket() = assignedTicket().copy(status = "in_progress", version = 3)
+
+    private fun completedTicket() = startedTicket().copy(
+        status = "awaiting_confirmation",
+        version = 4,
+        completionNote = "Replaced the washer and tested the tap.",
+        partsUsed = listOf("Rubber washer"),
+        hasCompletionPhoto = true,
+    )
 
     private fun baseTicket() = TicketResponse(
         id = TICKET_ID,
@@ -120,8 +194,10 @@ class TicketCommandSyncerTest {
         private val ticket: TicketResponse = baseResponse(),
         private val assignmentFailure: Throwable? = null,
         private val startFailure: Throwable? = null,
+        private val completionFailure: Throwable? = null,
     ) : ManagerTicketApi, WorkerTicketApi {
         var lastAssignment: TicketAssignmentPayload? = null
+        var lastCompletion: TicketCompletionPayload? = null
 
         override suspend fun listManagerTickets() = listOf(ticket)
         override suspend fun listManagerWorkers() = emptyList<WorkerResponse>()
@@ -146,7 +222,11 @@ class TicketCommandSyncerTest {
         override suspend fun submitCompletion(
             ticketId: String,
             request: TicketCompletionPayload,
-        ): TicketResponse = error("Not used")
+        ): TicketResponse {
+            lastCompletion = request
+            completionFailure?.let { throw it }
+            return ticket
+        }
 
         companion object {
             private fun baseResponse() = TicketResponse(

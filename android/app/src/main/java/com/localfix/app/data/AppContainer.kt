@@ -1,7 +1,13 @@
 package com.localfix.app.data
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.room.Room
+import com.localfix.app.R
+import com.localfix.app.data.command.RoomTicketCommandStore
+import com.localfix.app.data.command.TicketCommandSyncer
+import com.localfix.app.data.command.WorkManagerTicketCommandSyncScheduler
 import com.localfix.app.data.draft.RequestDraftRepository
 import com.localfix.app.data.draft.RoomRequestDraftRepository
 import com.localfix.app.data.local.LocalFixDatabase
@@ -11,10 +17,8 @@ import com.localfix.app.data.local.MIGRATION_3_4
 import com.localfix.app.data.local.MIGRATION_4_5
 import com.localfix.app.data.local.MIGRATION_5_6
 import com.localfix.app.data.local.MIGRATION_6_7
+import com.localfix.app.data.local.MIGRATION_7_8
 import com.localfix.app.data.local.RoomResidentRequestStore
-import com.localfix.app.data.command.RoomTicketCommandStore
-import com.localfix.app.data.command.TicketCommandSyncer
-import com.localfix.app.data.command.WorkManagerTicketCommandSyncScheduler
 import com.localfix.app.data.manager.ApiManagerRepository
 import com.localfix.app.data.manager.ManagerRepository
 import com.localfix.app.data.remote.HttpTicketApi
@@ -26,7 +30,6 @@ import com.localfix.app.data.resident.WorkManagerPendingRequestSyncScheduler
 import com.localfix.app.data.resident.ResidentRepository
 import com.localfix.app.data.worker.ApiWorkerRepository
 import com.localfix.app.data.worker.WorkerRepository
-import com.localfix.app.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -53,6 +56,7 @@ class DefaultAppContainer(context: Context) : AppContainer {
         MIGRATION_4_5,
         MIGRATION_5_6,
         MIGRATION_6_7,
+        MIGRATION_7_8,
     )
         .build()
 
@@ -105,6 +109,15 @@ class DefaultAppContainer(context: Context) : AppContainer {
         store = ticketCommandStore,
         onAssignmentSynced = apiManagerRepository::acceptSyncedTicket,
         onStartSynced = apiWorkerRepository::acceptSyncedTicket,
+        onCompletionSynced = apiWorkerRepository::acceptSyncedTicket,
+        onCompletionPhotoReleased = { photoUri ->
+            runCatching {
+                context.contentResolver.releasePersistableUriPermission(
+                    Uri.parse(photoUri),
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            }
+        },
     )
 
     override val managerRepository: ManagerRepository = apiManagerRepository

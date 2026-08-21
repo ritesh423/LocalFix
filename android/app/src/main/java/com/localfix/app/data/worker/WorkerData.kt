@@ -31,6 +31,11 @@ data class WorkerJob(
     val updatedLabel: String,
     val startDeliveryState: RequestDeliveryState = RequestDeliveryState.SYNCED,
     val startFailureMessage: String? = null,
+    val completionDeliveryState: RequestDeliveryState = RequestDeliveryState.SYNCED,
+    val completionFailureMessage: String? = null,
+    val pendingCompletionNote: String? = null,
+    val pendingPartsUsed: List<String> = emptyList(),
+    val pendingPhotoUri: String? = null,
 )
 
 data class WorkerJobEvent(

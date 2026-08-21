@@ -1,5 +1,6 @@
 package com.localfix.app.ui.worker
 
+import com.localfix.app.data.model.RequestDeliveryState
 import com.localfix.app.ui.components.RequestLoadUiState
 import com.localfix.app.ui.requests.RequestStatusTone
 
@@ -40,6 +41,7 @@ data class WorkerJobDetailUiState(
     val isSubmittingCompletion: Boolean = false,
     val completionSubmissionError: String? = null,
     val hasJustSubmittedCompletion: Boolean = false,
+    val completionDeliveryState: RequestDeliveryState = RequestDeliveryState.SYNCED,
     val history: List<WorkerHistoryItem> = emptyList(),
     val isHistoryLoading: Boolean = false,
     val historyError: String? = null,

@@ -73,9 +73,17 @@ class ApiWorkerRepositoryTest {
     }
 
     @Test
-    fun completionSendsStructuredEvidenceAndUpdatesTheJob() = runTest {
+    fun completionIsSavedAndScheduledBeforeAnyPhotoUpload() = runTest {
         val api = FakeWorkerApi()
-        val repository = repository(api, backgroundScope)
+        val store = InMemoryTicketCommandStore()
+        val scheduler = FakeCommandScheduler()
+        val repository = ApiWorkerRepository(
+            api,
+            store,
+            scheduler,
+            backgroundScope,
+            clock,
+        )
         repository.refresh()
         runCurrent()
 
@@ -88,19 +96,16 @@ class ApiWorkerRepositoryTest {
         )
         runCurrent()
 
-        assertEquals(
-            TicketCompletionPayload(
-                expectedVersion = 2,
-                completionNote = "Replaced the washer and tested the tap.",
-                partsUsed = listOf("Rubber washer"),
-                photoUri = "content://localfix/completion-photo",
-            ),
-            api.lastCompletionPayload,
-        )
+        assertEquals(null, api.lastCompletionPayload)
+        val command = store.getCommand(TICKET_ID, TicketCommandType.COMPLETE)
+        assertEquals(2, command?.expectedVersion)
+        assertEquals("Replaced the washer and tested the tap.", command?.completionNote)
+        assertEquals(listOf("Rubber washer"), command?.partsUsed)
+        assertEquals("content://localfix/completion-photo", command?.photoUri)
+        assertEquals(listOf(TicketCommandType.COMPLETE), scheduler.commandTypes)
         val job = repository.workerData.value.jobs.single()
-        assertEquals(TicketStatus.AWAITING_CONFIRMATION, job.status)
-        assertEquals("Replaced the washer and tested the tap.", job.completionNote)
-        assertTrue(job.hasCompletionPhoto)
+        assertEquals(RequestDeliveryState.PENDING, job.completionDeliveryState)
+        assertEquals("Replaced the washer and tested the tap.", job.pendingCompletionNote)
     }
 
     @Test
@@ -150,6 +155,7 @@ class ApiWorkerRepositoryTest {
 
     private class FakeCommandScheduler : TicketCommandSyncScheduler {
         val ticketIds = mutableListOf<String>()
+        val commandTypes = mutableListOf<TicketCommandType>()
 
         override fun schedule(
             ticketId: String,
@@ -157,6 +163,7 @@ class ApiWorkerRepositoryTest {
             replaceExisting: Boolean,
         ) {
             ticketIds += ticketId
+            commandTypes += commandType
         }
     }
 

@@ -11,7 +11,6 @@ import com.localfix.app.data.model.TicketStatus
 import com.localfix.app.data.model.UrgencySuggestion
 import com.localfix.app.data.remote.TicketResponse
 import com.localfix.app.data.remote.TicketEventResponse
-import com.localfix.app.data.remote.TicketCompletionPayload
 import com.localfix.app.data.remote.WorkerTicketApi
 import java.time.Clock
 import java.time.Duration
@@ -40,7 +39,7 @@ class ApiWorkerRepository(
     override val workerData: StateFlow<WorkerData> = combine(
         serverData,
         commandStore.observeCommands(),
-    ) { data, commands -> data.withPendingStarts(commands) }
+    ) { data, commands -> data.withPendingCommands(commands) }
         .stateIn(applicationScope, SharingStarted.Eagerly, emptyWorkerData())
     override val syncState: StateFlow<WorkerSyncState> = mutableSyncState.asStateFlow()
 
@@ -120,23 +119,39 @@ class ApiWorkerRepository(
         partsUsed: List<String>,
         photoUri: String,
     ): WorkerJob {
-        val completed = ticketApi.submitCompletion(
+        val command = PendingTicketCommandEntity(
             ticketId = ticketId,
-            request = TicketCompletionPayload(
-                expectedVersion = expectedVersion,
-                completionNote = completionNote,
-                partsUsed = partsUsed,
-                photoUri = photoUri,
-            ),
-        ).toWorkerJob(clock)
-        serverData.update { data ->
-            data.copy(
-                jobs = data.jobs.map { existing ->
-                    if (existing.id == completed.id) completed else existing
-                },
+            commandType = TicketCommandType.COMPLETE,
+            expectedVersion = expectedVersion,
+            priority = null,
+            workerId = null,
+            completionNote = completionNote,
+            partsUsed = partsUsed,
+            photoUri = photoUri,
+            deliveryState = RequestDeliveryState.PENDING,
+            failureMessage = null,
+            queuedAt = clock.instant().toString(),
+        )
+        commandStore.queue(command)
+        runCatching {
+            commandSyncScheduler.schedule(
+                ticketId,
+                TicketCommandType.COMPLETE,
+                replaceExisting = true,
             )
-        }
-        return completed
+        }.onFailure {
+            commandStore.markFailed(
+                ticketId,
+                TicketCommandType.COMPLETE,
+                "The repair was saved, but its upload could not be scheduled.",
+            )
+        }.getOrThrow()
+        return requireNotNull(serverData.value.jobs.find { it.id == ticketId }).copy(
+            completionDeliveryState = RequestDeliveryState.PENDING,
+            pendingCompletionNote = completionNote,
+            pendingPartsUsed = partsUsed,
+            pendingPhotoUri = photoUri,
+        )
     }
 
     private companion object {
@@ -151,21 +166,29 @@ class ApiWorkerRepository(
     }
 }
 
-private fun WorkerData.withPendingStarts(
+private fun WorkerData.withPendingCommands(
     commands: List<PendingTicketCommandEntity>,
 ): WorkerData {
     val starts = commands
         .filter { it.commandType == TicketCommandType.START }
         .associateBy(PendingTicketCommandEntity::ticketId)
-    return copy(
-        jobs = jobs.map { job ->
-            val command = starts[job.id] ?: return@map job
-            job.copy(
-                startDeliveryState = command.deliveryState,
-                startFailureMessage = command.failureMessage,
-            )
-        },
-    )
+    val completions = commands
+        .filter { it.commandType == TicketCommandType.COMPLETE }
+        .associateBy(PendingTicketCommandEntity::ticketId)
+    return copy(jobs = jobs.map { job ->
+        val start = starts[job.id]
+        val completion = completions[job.id]
+        job.copy(
+            startDeliveryState = start?.deliveryState ?: RequestDeliveryState.SYNCED,
+            startFailureMessage = start?.failureMessage,
+            completionDeliveryState = completion?.deliveryState
+                ?: RequestDeliveryState.SYNCED,
+            completionFailureMessage = completion?.failureMessage,
+            pendingCompletionNote = completion?.completionNote,
+            pendingPartsUsed = completion?.partsUsed.orEmpty(),
+            pendingPhotoUri = completion?.photoUri,
+        )
+    })
 }
 
 private fun TicketResponse.toWorkerJob(clock: Clock): WorkerJob = WorkerJob(

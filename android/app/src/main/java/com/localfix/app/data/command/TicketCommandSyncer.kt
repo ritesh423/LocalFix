@@ -5,12 +5,13 @@ import com.localfix.app.data.model.TicketCommandType
 import com.localfix.app.data.remote.ManagerTicketApi
 import com.localfix.app.data.remote.TicketApiException
 import com.localfix.app.data.remote.TicketAssignmentPayload
+import com.localfix.app.data.remote.TicketCompletionPayload
 import com.localfix.app.data.remote.TicketResponse
 import com.localfix.app.data.remote.TicketStartPayload
 import com.localfix.app.data.remote.WorkerTicketApi
 import com.localfix.app.data.resident.PendingRequestSyncResult
-import kotlinx.coroutines.CancellationException
 import java.io.IOException
+import kotlinx.coroutines.CancellationException
 
 class TicketCommandSyncer(
     private val managerApi: ManagerTicketApi,
@@ -18,6 +19,8 @@ class TicketCommandSyncer(
     private val store: TicketCommandStore,
     private val onAssignmentSynced: (TicketResponse) -> Unit,
     private val onStartSynced: (TicketResponse) -> Unit,
+    private val onCompletionSynced: (TicketResponse) -> Unit = {},
+    private val onCompletionPhotoReleased: (String) -> Unit = {},
 ) {
     suspend fun sync(
         ticketId: String,
@@ -56,6 +59,15 @@ class TicketCommandSyncer(
                 ticketId = command.ticketId,
                 request = TicketStartPayload(command.expectedVersion),
             )
+            TicketCommandType.COMPLETE -> workerApi.submitCompletion(
+                ticketId = command.ticketId,
+                request = TicketCompletionPayload(
+                    expectedVersion = command.expectedVersion,
+                    completionNote = requireNotNull(command.completionNote),
+                    partsUsed = command.partsUsed.orEmpty(),
+                    photoUri = requireNotNull(command.photoUri),
+                ),
+            )
         }
 
     private suspend fun resolvePossibleDuplicate(
@@ -63,7 +75,8 @@ class TicketCommandSyncer(
     ): PendingRequestSyncResult = try {
         val ticket = when (command.commandType) {
             TicketCommandType.ASSIGN -> managerApi.listManagerTickets()
-            TicketCommandType.START -> workerApi.listWorkerTickets()
+            TicketCommandType.START, TicketCommandType.COMPLETE ->
+                workerApi.listWorkerTickets()
         }.find { it.id == command.ticketId }
         if (ticket != null && ticket.matches(command)) {
             complete(command, ticket)
@@ -83,6 +96,10 @@ class TicketCommandSyncer(
         when (command.commandType) {
             TicketCommandType.ASSIGN -> onAssignmentSynced(ticket)
             TicketCommandType.START -> onStartSynced(ticket)
+            TicketCommandType.COMPLETE -> {
+                onCompletionSynced(ticket)
+                command.photoUri?.let(onCompletionPhotoReleased)
+            }
         }
         store.complete(command.ticketId, command.commandType)
         return PendingRequestSyncResult.SUCCESS
@@ -92,7 +109,11 @@ class TicketCommandSyncer(
         store.markFailed(
             command.ticketId,
             command.commandType,
-            "This action wasn't sent. Refresh the ticket and try again.",
+            if (command.commandType == TicketCommandType.COMPLETE) {
+                "The completion couldn't be sent. Check the photo and try again."
+            } else {
+                "This action wasn't sent. Refresh the ticket and try again."
+            },
         )
         return PendingRequestSyncResult.FAILURE
     }
@@ -104,6 +125,10 @@ class TicketCommandSyncer(
             TicketCommandType.START -> status in setOf(
                 "in_progress",
                 "blocked",
+                "awaiting_confirmation",
+                "completed",
+            )
+            TicketCommandType.COMPLETE -> status in setOf(
                 "awaiting_confirmation",
                 "completed",
             )

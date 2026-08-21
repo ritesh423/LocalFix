@@ -271,9 +271,11 @@ class HttpTicketApi(
                         "filename=\"completion-photo.${contentType.toExtension()}\"\r\n",
                 )
                 writeText("Content-Type: $contentType\r\n\r\n")
-                val input = requireNotNull(contentResolver.openInputStream(photoUri)) {
-                    "The selected completion photo is no longer available."
-                }
+                val input = runCatching { contentResolver.openInputStream(photoUri) }
+                    .getOrElse { error ->
+                        throw CompletionPhotoUnavailableException(error)
+                    }
+                    ?: throw CompletionPhotoUnavailableException()
                 input.use { it.copyTo(output) }
                 writeText("\r\n--$boundary--\r\n")
             }
@@ -346,3 +348,6 @@ class TicketApiException(
     val statusCode: Int,
     val responseBody: String,
 ) : Exception("Ticket API request failed with HTTP $statusCode")
+
+class CompletionPhotoUnavailableException(cause: Throwable? = null) :
+    IllegalStateException("The selected completion photo is no longer available.", cause)

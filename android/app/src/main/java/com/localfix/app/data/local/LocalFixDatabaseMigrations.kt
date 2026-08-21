@@ -97,3 +97,15 @@ val MIGRATION_6_7 = Migration(6, 7) { database ->
         """.trimIndent(),
     )
 }
+
+val MIGRATION_7_8 = Migration(7, 8) { database ->
+    database.execSQL(
+        "ALTER TABLE pending_ticket_commands ADD COLUMN completionNote TEXT",
+    )
+    database.execSQL(
+        "ALTER TABLE pending_ticket_commands ADD COLUMN partsUsed TEXT",
+    )
+    database.execSQL(
+        "ALTER TABLE pending_ticket_commands ADD COLUMN photoUri TEXT",
+    )
+}

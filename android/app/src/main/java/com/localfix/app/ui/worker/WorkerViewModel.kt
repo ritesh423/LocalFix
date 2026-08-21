@@ -57,6 +57,10 @@ class WorkerViewModel(
             ticketId = ticketId,
             isHistoryLoading = true,
             startError = job?.startFailureMessage,
+            completionNote = job?.pendingCompletionNote.orEmpty(),
+            partsUsed = job?.pendingPartsUsed.orEmpty().joinToString(", "),
+            photoUri = job?.pendingPhotoUri,
+            completionSubmissionError = job?.completionFailureMessage,
         )
         viewModelScope.launch { loadJobHistory(ticketId) }
     }
@@ -175,14 +179,16 @@ class WorkerViewModel(
                     partsUsed = parts,
                     photoUri = requireNotNull(current.photoUri),
                 )
-            }.onSuccess {
+            }.onSuccess { submittedJob ->
+                val wasQueued = submittedJob.completionDeliveryState ==
+                    RequestDeliveryState.PENDING
                 selection.update { state ->
                     state.copy(
                         isSubmittingCompletion = false,
-                        hasJustSubmittedCompletion = true,
+                        hasJustSubmittedCompletion = !wasQueued,
                     )
                 }
-                loadJobHistory(job.id)
+                if (!wasQueued) loadJobHistory(job.id)
             }.onFailure {
                 selection.update { state ->
                     state.copy(
@@ -287,6 +293,8 @@ private fun createWorkerUiState(
             isSubmittingCompletion = selection.isSubmittingCompletion,
             completionSubmissionError = selection.completionSubmissionError,
             hasJustSubmittedCompletion = selection.hasJustSubmittedCompletion,
+            completionDeliveryState = selectedJob?.completionDeliveryState
+                ?: RequestDeliveryState.SYNCED,
             history = selection.history.map(WorkerJobEvent::toUiState),
             isHistoryLoading = selection.isHistoryLoading,
             historyError = selection.historyError,
@@ -338,7 +346,8 @@ private fun WorkerJob.toDetail() = WorkerJobDetail(
     canStart = status == TicketStatus.ASSIGNED &&
         startDeliveryState != RequestDeliveryState.PENDING,
     canSubmitCompletion = status == TicketStatus.IN_PROGRESS &&
-        startDeliveryState == RequestDeliveryState.SYNCED,
+        startDeliveryState == RequestDeliveryState.SYNCED &&
+        completionDeliveryState != RequestDeliveryState.PENDING,
     completionNote = completionNote,
     partsUsed = partsUsed,
     hasCompletionPhoto = hasCompletionPhoto,
