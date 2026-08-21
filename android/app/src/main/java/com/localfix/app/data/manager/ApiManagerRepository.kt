@@ -10,6 +10,7 @@ import com.localfix.app.data.model.TicketCommandType
 import com.localfix.app.data.model.TicketStatus
 import com.localfix.app.data.model.UrgencySuggestion
 import com.localfix.app.data.remote.ManagerTicketApi
+import com.localfix.app.data.remote.ManagerSummaryResponse
 import com.localfix.app.data.remote.TicketResponse
 import com.localfix.app.data.remote.WorkerResponse
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -50,12 +51,17 @@ class ApiManagerRepository(
             ManagerSyncState.InitialLoading
         }
         runCatching {
-            ticketApi.listManagerTickets() to ticketApi.listManagerWorkers()
-        }.onSuccess { (tickets, workers) ->
+            Triple(
+                ticketApi.listManagerTickets(),
+                ticketApi.listManagerWorkers(),
+                ticketApi.getManagerSummary(),
+            )
+        }.onSuccess { (tickets, workers, summary) ->
             serverData.update { data ->
                 data.copy(
                     tickets = tickets.map { it.toManagerTicket(clock) },
                     workers = workers.map(WorkerResponse::toManagerWorker),
+                    summary = summary.toManagerSummary(),
                 )
             }
             hasLoaded = true
@@ -110,9 +116,22 @@ class ApiManagerRepository(
     fun acceptSyncedTicket(ticket: TicketResponse) {
         val assigned = ticket.toManagerTicket(clock)
         serverData.update { data ->
+            val previous = data.tickets.find { it.id == assigned.id }
             data.copy(
                 tickets = data.tickets.map { existing ->
                     if (existing.id == assigned.id) assigned else existing
+                },
+                summary = if (
+                    previous?.status == TicketStatus.OPEN &&
+                    assigned.status == TicketStatus.ASSIGNED
+                ) {
+                    data.summary.copy(
+                        needsAssignment = (data.summary.needsAssignment - 1)
+                            .coerceAtLeast(0),
+                        assigned = data.summary.assigned + 1,
+                    )
+                } else {
+                    data.summary
                 },
             )
         }
@@ -126,6 +145,7 @@ class ApiManagerRepository(
             propertyName = "Lakeview Residency",
             tickets = emptyList(),
             workers = emptyList(),
+            summary = ManagerSummary.Empty,
         )
     }
 }
@@ -171,6 +191,17 @@ private fun WorkerResponse.toManagerWorker(): ManagerWorker = ManagerWorker(
     id = id,
     name = name,
     specialty = ServiceCategory.valueOf(specialty.uppercase()),
+)
+
+private fun ManagerSummaryResponse.toManagerSummary() = ManagerSummary(
+    totalRequests = totalRequests,
+    activeRequests = activeRequests,
+    needsAssignment = needsAssignment,
+    assigned = assigned,
+    inProgress = inProgress,
+    blocked = blocked,
+    awaitingConfirmation = awaitingConfirmation,
+    completed = completed,
 )
 
 private fun String.toUnitLabel(): String = when (this) {

@@ -39,6 +39,10 @@ class SampleManagerRepository : ManagerRepository {
                 tickets = data.tickets.map { ticket ->
                     if (ticket.id == assigned.id) assigned else ticket
                 },
+                summary = data.summary.copy(
+                    needsAssignment = data.summary.needsAssignment - 1,
+                    assigned = data.summary.assigned + 1,
+                ),
             )
         }
         return assigned
@@ -97,5 +101,15 @@ fun sampleManagerData() = ManagerData(
             name = "Sameer Khan",
             specialty = ServiceCategory.APPLIANCE,
         ),
+    ),
+    summary = ManagerSummary(
+        totalRequests = 2,
+        activeRequests = 2,
+        needsAssignment = 1,
+        assigned = 1,
+        inProgress = 0,
+        blocked = 0,
+        awaitingConfirmation = 0,
+        completed = 0,
     ),
 )

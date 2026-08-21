@@ -43,6 +43,18 @@ class CreateTicketResult:
 
 
 @dataclass(frozen=True)
+class ManagerTicketSummary:
+    total_requests: int
+    active_requests: int
+    needs_assignment: int
+    assigned: int
+    in_progress: int
+    blocked: int
+    awaiting_confirmation: int
+    completed: int
+
+
+@dataclass(frozen=True)
 class AssignTicketCommand:
     expected_version: int
     priority: TicketPriority
@@ -181,6 +193,26 @@ class TicketService:
 
     def list_manager_tickets(self, manager: ManagerContext) -> list[Ticket]:
         return self._repository.list_for_property(manager.property_id)
+
+    def get_manager_summary(self, manager: ManagerContext) -> ManagerTicketSummary:
+        tickets = self._repository.list_for_property(manager.property_id)
+
+        def count(status: TicketStatus) -> int:
+            return sum(ticket.status is status for ticket in tickets)
+
+        return ManagerTicketSummary(
+            total_requests=len(tickets),
+            active_requests=sum(
+                ticket.status not in {TicketStatus.COMPLETED, TicketStatus.CANCELLED}
+                for ticket in tickets
+            ),
+            needs_assignment=count(TicketStatus.OPEN),
+            assigned=count(TicketStatus.ASSIGNED),
+            in_progress=count(TicketStatus.IN_PROGRESS),
+            blocked=count(TicketStatus.BLOCKED),
+            awaiting_confirmation=count(TicketStatus.AWAITING_CONFIRMATION),
+            completed=count(TicketStatus.COMPLETED),
+        )
 
     def list_manager_ticket_events(
         self,

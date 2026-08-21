@@ -7,6 +7,7 @@ import com.localfix.app.data.model.ServiceCategory
 import com.localfix.app.data.model.TicketCommandType
 import com.localfix.app.data.model.TicketStatus
 import com.localfix.app.data.remote.ManagerTicketApi
+import com.localfix.app.data.remote.ManagerSummaryResponse
 import com.localfix.app.data.remote.TicketAssignmentPayload
 import com.localfix.app.data.remote.TicketResponse
 import com.localfix.app.data.remote.WorkerResponse
@@ -47,6 +48,8 @@ class ApiManagerRepositoryTest {
         assertEquals(TicketStatus.OPEN, data.tickets.single().status)
         assertEquals("Updated 15 min ago", data.tickets.single().updatedLabel)
         assertEquals(ServiceCategory.PLUMBING, data.workers.single().specialty)
+        assertEquals(1, data.summary.activeRequests)
+        assertEquals(1, data.summary.needsAssignment)
         assertEquals(ManagerSyncState.Ready, repository.syncState.value)
     }
 
@@ -82,6 +85,33 @@ class ApiManagerRepositoryTest {
         assertEquals(TicketStatus.OPEN, assigned.status)
         assertEquals("Arun Kumar", assigned.assignedWorker)
         assertEquals(RequestDeliveryState.PENDING, assigned.commandDeliveryState)
+    }
+
+    @Test
+    fun confirmedAssignmentUpdatesTheServerBackedSummary() = runTest {
+        val repository = ApiManagerRepository(
+            FakeManagerApi(),
+            InMemoryTicketCommandStore(),
+            FakeCommandScheduler(),
+            backgroundScope,
+            clock,
+        )
+        repository.refresh()
+        runCurrent()
+
+        repository.acceptSyncedTicket(
+            ticketResponse().copy(
+                status = "assigned",
+                priority = "soon",
+                assignedWorkerId = WORKER_ID,
+                assignedWorker = "Arun Kumar",
+                version = 2,
+            ),
+        )
+        runCurrent()
+
+        assertEquals(0, repository.managerData.value.summary.needsAssignment)
+        assertEquals(1, repository.managerData.value.summary.assigned)
     }
 
     @Test
@@ -129,6 +159,17 @@ class ApiManagerRepositoryTest {
                 name = "Arun Kumar",
                 specialty = "plumbing",
             ),
+        )
+
+        override suspend fun getManagerSummary() = ManagerSummaryResponse(
+            totalRequests = 1,
+            activeRequests = 1,
+            needsAssignment = 1,
+            assigned = 0,
+            inProgress = 0,
+            blocked = 0,
+            awaitingConfirmation = 0,
+            completed = 0,
         )
 
         override suspend fun assignTicket(

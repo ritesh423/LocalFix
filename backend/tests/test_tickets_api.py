@@ -163,6 +163,30 @@ class TicketsApiTest(unittest.TestCase):
             ["Arun Kumar", "Maya Singh", "Sameer Khan"],
         )
 
+    def test_manager_summary_reports_property_work_by_status(self) -> None:
+        created = self.client.post("/tickets", json=self.ticket_payload()).json()
+        self.client.post(
+            f"/manager/tickets/{created['id']}/assignment",
+            json=self.assignment_payload(expected_version=created["version"]),
+        )
+
+        response = self.client.get("/manager/summary")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                "total_requests": 1,
+                "active_requests": 1,
+                "needs_assignment": 0,
+                "assigned": 1,
+                "in_progress": 0,
+                "blocked": 0,
+                "awaiting_confirmation": 0,
+                "completed": 0,
+            },
+        )
+
     def test_stale_manager_version_is_rejected_without_overwriting_assignment(
         self,
     ) -> None:

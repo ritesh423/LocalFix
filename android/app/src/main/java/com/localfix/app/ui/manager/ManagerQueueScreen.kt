@@ -62,8 +62,7 @@ fun ManagerQueueScreen(
         }
         item {
             QueueMetrics(
-                needsAssignment = uiState.needsAssignmentCount,
-                assigned = uiState.assignedCount,
+                summary = uiState.summary,
                 modifier = Modifier.padding(LocalFixSpacing.medium),
             )
         }
@@ -141,22 +140,57 @@ fun ManagerQueueScreen(
 
 @Composable
 private fun QueueMetrics(
-    needsAssignment: Int,
-    assigned: Int,
+    summary: ManagerSummaryUiState,
     modifier: Modifier = Modifier,
 ) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        Text(
+            text = "${summary.activeRequests} active requests",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.titleMedium,
+        )
+        MetricRow(
+            leftValue = summary.needsAssignment,
+            leftLabel = "Need assignment",
+            rightValue = summary.assigned,
+            rightLabel = "Assigned",
+        )
+        MetricRow(
+            leftValue = summary.inProgress,
+            leftLabel = "In progress",
+            rightValue = summary.blocked,
+            rightLabel = "Blocked",
+        )
+        MetricRow(
+            leftValue = summary.awaitingConfirmation,
+            leftLabel = "Resident review",
+            rightValue = summary.completed,
+            rightLabel = "Completed",
+        )
+    }
+}
+
+@Composable
+private fun MetricRow(
+    leftValue: Int,
+    leftLabel: String,
+    rightValue: Int,
+    rightLabel: String,
+) {
     Row(
-        modifier = modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = LocalFixSpacing.small),
         horizontalArrangement = Arrangement.spacedBy(LocalFixSpacing.small),
     ) {
         QueueMetric(
-            value = needsAssignment.toString(),
-            label = "Need assignment",
+            value = leftValue.toString(),
+            label = leftLabel,
             modifier = Modifier.weight(1f),
         )
         QueueMetric(
-            value = assigned.toString(),
-            label = "Assigned",
+            value = rightValue.toString(),
+            label = rightLabel,
             modifier = Modifier.weight(1f),
         )
     }
@@ -272,8 +306,15 @@ private fun ManagerQueuePreview() {
         ManagerQueueScreen(
             uiState = ManagerQueueUiState(
                 propertyName = "Lakeview Residency",
-                needsAssignmentCount = 1,
-                assignedCount = 1,
+                summary = ManagerSummaryUiState(
+                    activeRequests = 2,
+                    needsAssignment = 1,
+                    assigned = 1,
+                    inProgress = 0,
+                    blocked = 0,
+                    awaitingConfirmation = 0,
+                    completed = 0,
+                ),
                 tickets = listOf(
                     ManagerTicketItem(
                         id = "1",

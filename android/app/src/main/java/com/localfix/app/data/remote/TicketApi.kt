@@ -30,6 +30,8 @@ interface ManagerTicketApi {
 
     suspend fun listManagerWorkers(): List<WorkerResponse>
 
+    suspend fun getManagerSummary(): ManagerSummaryResponse
+
     suspend fun assignTicket(
         ticketId: String,
         request: TicketAssignmentPayload,
@@ -94,6 +96,18 @@ data class WorkerResponse(
     val id: String,
     val name: String,
     val specialty: String,
+)
+
+@Serializable
+data class ManagerSummaryResponse(
+    @SerialName("total_requests") val totalRequests: Int,
+    @SerialName("active_requests") val activeRequests: Int,
+    @SerialName("needs_assignment") val needsAssignment: Int,
+    val assigned: Int,
+    @SerialName("in_progress") val inProgress: Int,
+    val blocked: Int,
+    @SerialName("awaiting_confirmation") val awaitingConfirmation: Int,
+    val completed: Int,
 )
 
 @Serializable
@@ -180,6 +194,11 @@ class HttpTicketApi(
 
     override suspend fun listManagerWorkers(): List<WorkerResponse> {
         val responseBody = execute(method = "GET", path = "/manager/workers")
+        return json.decodeFromString(responseBody)
+    }
+
+    override suspend fun getManagerSummary(): ManagerSummaryResponse {
+        val responseBody = execute(method = "GET", path = "/manager/summary")
         return json.decodeFromString(responseBody)
     }
 

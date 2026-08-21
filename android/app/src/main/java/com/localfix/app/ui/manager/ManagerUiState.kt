@@ -12,10 +12,19 @@ data class ManagerUiState(
 
 data class ManagerQueueUiState(
     val propertyName: String,
-    val needsAssignmentCount: Int,
-    val assignedCount: Int,
+    val summary: ManagerSummaryUiState,
     val tickets: List<ManagerTicketItem>,
     val loadState: RequestLoadUiState,
+)
+
+data class ManagerSummaryUiState(
+    val activeRequests: Int,
+    val needsAssignment: Int,
+    val assigned: Int,
+    val inProgress: Int,
+    val blocked: Int,
+    val awaitingConfirmation: Int,
+    val completed: Int,
 )
 
 data class ManagerTicketItem(

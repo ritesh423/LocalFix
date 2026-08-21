@@ -10,7 +10,32 @@ data class ManagerData(
     val propertyName: String,
     val tickets: List<ManagerTicket>,
     val workers: List<ManagerWorker>,
+    val summary: ManagerSummary,
 )
+
+data class ManagerSummary(
+    val totalRequests: Int,
+    val activeRequests: Int,
+    val needsAssignment: Int,
+    val assigned: Int,
+    val inProgress: Int,
+    val blocked: Int,
+    val awaitingConfirmation: Int,
+    val completed: Int,
+) {
+    companion object {
+        val Empty = ManagerSummary(
+            totalRequests = 0,
+            activeRequests = 0,
+            needsAssignment = 0,
+            assigned = 0,
+            inProgress = 0,
+            blocked = 0,
+            awaitingConfirmation = 0,
+            completed = 0,
+        )
+    }
+}
 
 data class ManagerTicket(
     val id: String,

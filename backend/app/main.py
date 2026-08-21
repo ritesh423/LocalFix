@@ -20,7 +20,7 @@ def create_app(
 ) -> FastAPI:
     application = FastAPI(
         title="LocalFix API",
-        version="0.7.0",
+        version="0.8.0",
         description="Apartment maintenance workflow API.",
     )
     if repository is None:

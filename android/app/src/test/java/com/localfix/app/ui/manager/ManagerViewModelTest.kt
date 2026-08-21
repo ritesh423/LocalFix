@@ -25,8 +25,9 @@ class ManagerViewModelTest {
         advanceUntilIdle()
 
         val queue = viewModel.uiState.value.queue
-        assertEquals(1, queue.needsAssignmentCount)
-        assertEquals(1, queue.assignedCount)
+        assertEquals(2, queue.summary.activeRequests)
+        assertEquals(1, queue.summary.needsAssignment)
+        assertEquals(1, queue.summary.assigned)
         assertEquals(RequestLoadUiState.Content, queue.loadState)
         assertEquals("Apartment A-204", queue.tickets.first().unitLabel)
     }
@@ -75,8 +76,8 @@ class ManagerViewModelTest {
         advanceUntilIdle()
 
         assertTrue(viewModel.uiState.value.assignment.assignmentCompleted)
-        assertEquals(0, viewModel.uiState.value.queue.needsAssignmentCount)
-        assertEquals(2, viewModel.uiState.value.queue.assignedCount)
+        assertEquals(0, viewModel.uiState.value.queue.summary.needsAssignment)
+        assertEquals(2, viewModel.uiState.value.queue.summary.assigned)
         assertEquals("Arun Kumar", viewModel.uiState.value.queue.tickets.first().assignedWorker)
     }
 

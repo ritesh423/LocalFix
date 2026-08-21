@@ -17,6 +17,7 @@ from app.domain.tickets import (
 from app.services.tickets import (
     AssignTicketCommand,
     CreateTicketCommand,
+    ManagerTicketSummary,
     ReviewTicketCommand,
     StartTicketCommand,
 )
@@ -106,6 +107,33 @@ class WorkerResponse(BaseModel):
             id=worker.id,
             name=worker.name,
             specialty=worker.specialty,
+        )
+
+
+class ManagerTicketSummaryResponse(BaseModel):
+    total_requests: int
+    active_requests: int
+    needs_assignment: int
+    assigned: int
+    in_progress: int
+    blocked: int
+    awaiting_confirmation: int
+    completed: int
+
+    @classmethod
+    def from_domain(
+        cls,
+        summary: ManagerTicketSummary,
+    ) -> "ManagerTicketSummaryResponse":
+        return cls(
+            total_requests=summary.total_requests,
+            active_requests=summary.active_requests,
+            needs_assignment=summary.needs_assignment,
+            assigned=summary.assigned,
+            in_progress=summary.in_progress,
+            blocked=summary.blocked,
+            awaiting_confirmation=summary.awaiting_confirmation,
+            completed=summary.completed,
         )
 
 

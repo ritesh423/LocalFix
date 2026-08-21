@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, status
 
 from app.api.dependencies import ManagerContextDependency, TicketServiceDependency
 from app.api.schemas import (
+    ManagerTicketSummaryResponse,
     TicketAssignmentRequest,
     TicketEventResponse,
     TicketResponse,
@@ -17,6 +18,16 @@ from app.services.tickets import (
 )
 
 router = APIRouter(prefix="/manager", tags=["manager"])
+
+
+@router.get("/summary", response_model=ManagerTicketSummaryResponse)
+def get_manager_summary(
+    service: TicketServiceDependency,
+    manager: ManagerContextDependency,
+) -> ManagerTicketSummaryResponse:
+    return ManagerTicketSummaryResponse.from_domain(
+        service.get_manager_summary(manager)
+    )
 
 
 @router.get("/tickets", response_model=list[TicketResponse])

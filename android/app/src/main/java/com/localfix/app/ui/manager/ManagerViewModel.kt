@@ -146,11 +146,15 @@ private fun createManagerUiState(
     return ManagerUiState(
         queue = ManagerQueueUiState(
             propertyName = data.propertyName,
-            needsAssignmentCount = data.tickets.count {
-                it.status == TicketStatus.OPEN &&
-                    it.commandDeliveryState != RequestDeliveryState.PENDING
-            },
-            assignedCount = data.tickets.count { it.status == TicketStatus.ASSIGNED },
+            summary = ManagerSummaryUiState(
+                activeRequests = data.summary.activeRequests,
+                needsAssignment = data.summary.needsAssignment,
+                assigned = data.summary.assigned,
+                inProgress = data.summary.inProgress,
+                blocked = data.summary.blocked,
+                awaitingConfirmation = data.summary.awaitingConfirmation,
+                completed = data.summary.completed,
+            ),
             tickets = data.tickets.map(ManagerTicket::toQueueItem),
             loadState = syncState.toLoadUiState(data.tickets.isNotEmpty()),
         ),

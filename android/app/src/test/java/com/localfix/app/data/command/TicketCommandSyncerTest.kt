@@ -4,6 +4,7 @@ import com.localfix.app.data.local.PendingTicketCommandEntity
 import com.localfix.app.data.model.RequestDeliveryState
 import com.localfix.app.data.model.TicketCommandType
 import com.localfix.app.data.remote.ManagerTicketApi
+import com.localfix.app.data.remote.ManagerSummaryResponse
 import com.localfix.app.data.remote.TicketApiException
 import com.localfix.app.data.remote.TicketAssignmentPayload
 import com.localfix.app.data.remote.TicketCompletionPayload
@@ -201,6 +202,16 @@ class TicketCommandSyncerTest {
 
         override suspend fun listManagerTickets() = listOf(ticket)
         override suspend fun listManagerWorkers() = emptyList<WorkerResponse>()
+        override suspend fun getManagerSummary() = ManagerSummaryResponse(
+            totalRequests = 0,
+            activeRequests = 0,
+            needsAssignment = 0,
+            assigned = 0,
+            inProgress = 0,
+            blocked = 0,
+            awaitingConfirmation = 0,
+            completed = 0,
+        )
         override suspend fun assignTicket(
             ticketId: String,
             request: TicketAssignmentPayload,
