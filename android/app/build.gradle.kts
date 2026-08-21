@@ -6,6 +6,10 @@ plugins {
     alias(libs.plugins.kotlinx.serialization)
 }
 
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 android {
     namespace = "com.localfix.app"
     compileSdk = 36
@@ -61,6 +65,9 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.kotlinx.serialization.core)
     implementation(libs.kotlinx.serialization.json)
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.messaging)
+    implementation(libs.firebase.installations)
 
     ksp(libs.androidx.room.compiler)
 

@@ -14,6 +14,8 @@ from app.api.dependencies import (
     DEMO_WORKERS,
 )
 from app.database.session import create_database_engine, create_session_factory
+from app.domain.device_registrations import DevicePlatform
+from app.domain.ticket_workflow import UserRole
 from app.domain.tickets import (
     AccessWindow,
     ResidentContext,
@@ -22,7 +24,11 @@ from app.domain.tickets import (
     TicketPriority,
     UrgencySuggestion,
 )
+from app.repositories.sqlalchemy_device_registrations import (
+    SqlAlchemyDeviceRegistrationRepository,
+)
 from app.repositories.sqlalchemy_tickets import SqlAlchemyTicketRepository
+from app.services.device_registrations import DeviceRegistrationService
 from app.services.tickets import (
     AssignTicketCommand,
     CompletionPhoto,
@@ -73,6 +79,37 @@ class SqlAlchemyTicketRepositoryTest(unittest.TestCase):
         self.assertEqual(restored.title, "Leaking kitchen tap")
         self.assertFalse(retry.was_created)
         self.assertEqual(retry.ticket.id, created.id)
+
+    def test_device_registration_survives_engine_recreation(self) -> None:
+        installation_id = uuid4()
+        first_engine = create_database_engine(self.database_url)
+        first_service = DeviceRegistrationService(
+            SqlAlchemyDeviceRegistrationRepository(
+                create_session_factory(first_engine)
+            )
+        )
+        first_service.register(
+            installation_id=installation_id,
+            firebase_installation_id="durable-firebase-installation-id",
+            platform=DevicePlatform.ANDROID,
+            role=UserRole.RESIDENT,
+            user_id=DEMO_RESIDENT_CONTEXT.user_id,
+            property_id=DEMO_RESIDENT_CONTEXT.property_id,
+        )
+        first_engine.dispose()
+
+        second_engine = create_database_engine(self.database_url)
+        restored = SqlAlchemyDeviceRegistrationRepository(
+            create_session_factory(second_engine)
+        ).get(installation_id)
+        second_engine.dispose()
+
+        self.assertIsNotNone(restored)
+        self.assertEqual(
+            restored.firebase_installation_id,
+            "durable-firebase-installation-id",
+        )
+        self.assertEqual(restored.role, UserRole.RESIDENT)
 
     def test_sql_repository_hides_another_residents_ticket(self) -> None:
         engine = create_database_engine(self.database_url)
@@ -300,6 +337,12 @@ class SqlAlchemyTicketRepositoryTest(unittest.TestCase):
             index["name"]
             for index in inspect(migrated_engine).get_indexes("ticket_events")
         }
+        device_index_names = {
+            index["name"]
+            for index in inspect(migrated_engine).get_indexes(
+                "device_registrations"
+            )
+        }
         with migrated_engine.connect() as connection:
             restored_title = connection.scalar(
                 text("SELECT title FROM tickets WHERE id = :id"),
@@ -327,6 +370,7 @@ class SqlAlchemyTicketRepositoryTest(unittest.TestCase):
         self.assertIn("resident_reviewed_at", column_names)
         self.assertIn("ix_tickets_worker_status_updated", index_names)
         self.assertIn("ix_ticket_events_ticket_created", event_index_names)
+        self.assertIn("ix_device_registrations_recipient", device_index_names)
         self.assertEqual(restored_title, "Existing ticket")
         self.assertEqual(
             tuple(baseline_event),

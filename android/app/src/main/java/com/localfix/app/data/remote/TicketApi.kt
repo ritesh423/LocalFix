@@ -155,13 +155,25 @@ class HttpTicketApi(
     baseUrl: String,
     private val contentResolver: ContentResolver,
     private val json: Json = Json { ignoreUnknownKeys = true },
-) : TicketApi, ManagerTicketApi, WorkerTicketApi {
+) : TicketApi, ManagerTicketApi, WorkerTicketApi, PushRegistrationApi {
     private val baseUrl = baseUrl.trimEnd('/')
 
     override suspend fun createTicket(request: TicketCreatePayload): TicketResponse {
         val responseBody = execute(
             method = "POST",
             path = "/tickets",
+            requestBody = json.encodeToString(request),
+        )
+        return json.decodeFromString(responseBody)
+    }
+
+    override suspend fun registerPushDevice(
+        role: String,
+        request: PushRegistrationPayload,
+    ): PushRegistrationResponse {
+        val responseBody = execute(
+            method = "POST",
+            path = "/devices/${role.lowercase()}",
             requestBody = json.encodeToString(request),
         )
         return json.decodeFromString(responseBody)

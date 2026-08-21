@@ -18,6 +18,31 @@ class Base(DeclarativeBase):
     pass
 
 
+class DeviceRegistrationRecord(Base):
+    __tablename__ = "device_registrations"
+    __table_args__ = (
+        Index(
+            "ix_device_registrations_recipient",
+            "property_id",
+            "role",
+            "user_id",
+        ),
+        UniqueConstraint(
+            "firebase_installation_id",
+            name="uq_device_registrations_firebase_installation_id",
+        ),
+    )
+
+    installation_id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
+    firebase_installation_id: Mapped[str] = mapped_column(String(255))
+    platform: Mapped[str] = mapped_column(String(32))
+    role: Mapped[str] = mapped_column(String(32))
+    user_id: Mapped[UUID] = mapped_column(Uuid())
+    property_id: Mapped[UUID] = mapped_column(Uuid())
+    registered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 class TicketRecord(Base):
     __tablename__ = "tickets"
     __table_args__ = (

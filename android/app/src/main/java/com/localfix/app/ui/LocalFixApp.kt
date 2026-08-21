@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import com.localfix.app.data.AppContainer
+import com.localfix.app.data.notifications.PushRole
 import com.localfix.app.ui.navigation.ManagerNavigation
 import com.localfix.app.ui.navigation.ResidentNavigation
 import com.localfix.app.ui.navigation.WorkerNavigation
@@ -14,14 +15,23 @@ import com.localfix.app.ui.session.AppRole
 import com.localfix.app.ui.theme.LocalFixTheme
 
 @Composable
-fun LocalFixApp(appContainer: AppContainer) {
+fun LocalFixApp(
+    appContainer: AppContainer,
+    onRequestNotificationPermission: () -> Unit = {},
+) {
     var activeRoleName by rememberSaveable { mutableStateOf<String?>(null) }
     val activeRole = activeRoleName?.let(AppRole::valueOf)
 
     LocalFixTheme {
         when (activeRole) {
             null -> RoleSelectionScreen(
-                onRoleSelected = { role -> activeRoleName = role.name },
+                onRoleSelected = { role ->
+                    activeRoleName = role.name
+                    appContainer.pushRegistrationManager?.activate(
+                        PushRole.valueOf(role.name),
+                    )
+                    onRequestNotificationPermission()
+                },
             )
             AppRole.RESIDENT -> ResidentNavigation(
                 repository = appContainer.residentRepository,

@@ -21,6 +21,9 @@ import com.localfix.app.data.local.MIGRATION_7_8
 import com.localfix.app.data.local.RoomResidentRequestStore
 import com.localfix.app.data.manager.ApiManagerRepository
 import com.localfix.app.data.manager.ManagerRepository
+import com.localfix.app.data.notifications.DefaultFirebaseInstallationProvider
+import com.localfix.app.data.notifications.PushRegistrationManager
+import com.localfix.app.data.notifications.SharedPreferencesPushRegistrationStore
 import com.localfix.app.data.remote.HttpTicketApi
 import com.localfix.app.data.resident.ApiResidentRepository
 import com.localfix.app.data.resident.PendingRequestSyncer
@@ -40,6 +43,8 @@ interface AppContainer {
     val managerRepository: ManagerRepository
     val workerRepository: WorkerRepository
     val requestDraftRepository: RequestDraftRepository
+    val pushRegistrationManager: PushRegistrationManager?
+        get() = null
 }
 
 class DefaultAppContainer(context: Context) : AppContainer {
@@ -63,6 +68,17 @@ class DefaultAppContainer(context: Context) : AppContainer {
     private val ticketApi = HttpTicketApi(
         baseUrl = context.getString(R.string.api_base_url),
         contentResolver = context.contentResolver,
+    )
+    override val pushRegistrationManager = PushRegistrationManager(
+        api = ticketApi,
+        store = SharedPreferencesPushRegistrationStore(
+            context.getSharedPreferences(
+                "localfix_push_registration",
+                Context.MODE_PRIVATE,
+            ),
+        ),
+        firebaseInstallationProvider = DefaultFirebaseInstallationProvider(),
+        applicationScope = applicationScope,
     )
     private val residentRequestStore = RoomResidentRequestStore(
         ticketDao = database.residentTicketDao(),

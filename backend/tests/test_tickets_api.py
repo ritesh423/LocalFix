@@ -11,6 +11,9 @@ from app.domain.tickets import (
     UrgencySuggestion,
 )
 from app.main import create_app
+from app.repositories.device_registrations import (
+    InMemoryDeviceRegistrationRepository,
+)
 from app.repositories.tickets import InMemoryTicketRepository
 from app.services.tickets import CreateTicketCommand, TicketService
 from app.storage.evidence import InMemoryEvidenceStorage
@@ -20,8 +23,13 @@ class TicketsApiTest(unittest.TestCase):
     def setUp(self) -> None:
         self.repository = InMemoryTicketRepository()
         self.evidence_storage = InMemoryEvidenceStorage()
+        self.device_registration_repository = InMemoryDeviceRegistrationRepository()
         self.client = TestClient(
-            create_app(self.repository, evidence_storage=self.evidence_storage)
+            create_app(
+                self.repository,
+                evidence_storage=self.evidence_storage,
+                device_registration_repository=self.device_registration_repository,
+            )
         )
 
     def test_health_reports_that_the_api_is_running(self) -> None:
@@ -29,6 +37,51 @@ class TicketsApiTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"status": "ok"})
+
+    def test_resident_device_is_registered_to_the_server_context(self) -> None:
+        installation_id = uuid4()
+
+        response = self.client.post(
+            "/devices/resident",
+            json={
+                "installation_id": str(installation_id),
+                "firebase_installation_id": "resident-firebase-installation-id",
+                "platform": "android",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["role"], "resident")
+        stored = self.device_registration_repository.get(installation_id)
+        self.assertEqual(stored.user_id, DEMO_RESIDENT_CONTEXT.user_id)
+        self.assertEqual(stored.property_id, DEMO_RESIDENT_CONTEXT.property_id)
+
+    def test_new_firebase_id_and_role_replace_the_same_app_installation(self) -> None:
+        installation_id = uuid4()
+        first = self.client.post(
+            "/devices/resident",
+            json={
+                "installation_id": str(installation_id),
+                "firebase_installation_id": "resident-firebase-installation-id",
+            },
+        )
+
+        second = self.client.post(
+            "/devices/manager",
+            json={
+                "installation_id": str(installation_id),
+                "firebase_installation_id": "manager-firebase-installation-id",
+            },
+        )
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        stored = self.device_registration_repository.get(installation_id)
+        self.assertEqual(stored.role.value, "manager")
+        self.assertEqual(
+            stored.firebase_installation_id,
+            "manager-firebase-installation-id",
+        )
 
     def test_resident_can_create_and_read_a_ticket(self) -> None:
         response = self.client.post("/tickets", json=self.ticket_payload())

@@ -3,6 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.domain.device_registrations import DevicePlatform, DeviceRegistration
 from app.domain.ticket_workflow import TicketAction, TicketStatus, UserRole
 from app.domain.tickets import (
     AccessWindow,
@@ -41,6 +42,42 @@ class TicketCreateRequest(BaseModel):
             category=self.category,
             urgency_suggestion=self.urgency_suggestion,
             access_window=self.access_window,
+        )
+
+
+class DeviceRegistrationRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    installation_id: UUID
+    firebase_installation_id: str = Field(min_length=10, max_length=255)
+    platform: DevicePlatform = DevicePlatform.ANDROID
+
+    def registration_fields(self) -> dict[str, UUID | str | DevicePlatform]:
+        return {
+            "installation_id": self.installation_id,
+            "firebase_installation_id": self.firebase_installation_id,
+            "platform": self.platform,
+        }
+
+
+class DeviceRegistrationResponse(BaseModel):
+    installation_id: UUID
+    platform: DevicePlatform
+    role: UserRole
+    registered_at: datetime
+    updated_at: datetime
+
+    @classmethod
+    def from_domain(
+        cls,
+        registration: DeviceRegistration,
+    ) -> "DeviceRegistrationResponse":
+        return cls(
+            installation_id=registration.installation_id,
+            platform=registration.platform,
+            role=registration.role,
+            registered_at=registration.registered_at,
+            updated_at=registration.updated_at,
         )
 
 

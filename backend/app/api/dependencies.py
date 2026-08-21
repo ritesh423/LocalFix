@@ -10,7 +10,9 @@ from app.domain.tickets import (
     Worker,
     WorkerContext,
 )
+from app.repositories.device_registrations import DeviceRegistrationRepository
 from app.repositories.tickets import TicketRepository
+from app.services.device_registrations import DeviceRegistrationService
 from app.services.tickets import TicketService
 from app.storage.evidence import EvidenceStorage
 
@@ -74,6 +76,21 @@ def get_ticket_service(
     )
 
 
+def get_device_registration_repository(
+    request: Request,
+) -> DeviceRegistrationRepository:
+    return request.app.state.device_registration_repository
+
+
+def get_device_registration_service(
+    repository: Annotated[
+        DeviceRegistrationRepository,
+        Depends(get_device_registration_repository),
+    ],
+) -> DeviceRegistrationService:
+    return DeviceRegistrationService(repository)
+
+
 def get_resident_context() -> ResidentContext:
     return DEMO_RESIDENT_CONTEXT
 
@@ -98,4 +115,8 @@ ManagerContextDependency = Annotated[
 WorkerContextDependency = Annotated[
     WorkerContext,
     Depends(get_worker_context),
+]
+DeviceRegistrationServiceDependency = Annotated[
+    DeviceRegistrationService,
+    Depends(get_device_registration_service),
 ]
