@@ -3,6 +3,7 @@ from threading import Lock
 from typing import Protocol
 from uuid import UUID
 
+from app.domain.notifications import NotificationJob
 from app.domain.tickets import Ticket, TicketEvent
 
 
@@ -11,6 +12,7 @@ class TicketRepository(Protocol):
         self,
         ticket: Ticket,
         event: TicketEvent,
+        notification_jobs: tuple[NotificationJob, ...] = (),
     ) -> tuple[Ticket, bool]: ...
 
     def list_for_resident(
@@ -52,6 +54,7 @@ class TicketRepository(Protocol):
         ticket: Ticket,
         expected_version: int,
         event: TicketEvent,
+        notification_jobs: tuple[NotificationJob, ...] = (),
     ) -> bool: ...
 
     def list_events(self, ticket_id: UUID) -> list[TicketEvent]: ...
@@ -64,12 +67,14 @@ class InMemoryTicketRepository:
             ticket.client_request_id: ticket.id for ticket in tickets
         }
         self._events_by_ticket: dict[UUID, list[TicketEvent]] = {}
+        self.notification_jobs: list[NotificationJob] = []
         self._lock = Lock()
 
     def create(
         self,
         ticket: Ticket,
         event: TicketEvent,
+        notification_jobs: tuple[NotificationJob, ...] = (),
     ) -> tuple[Ticket, bool]:
         with self._lock:
             existing_id = self._ticket_ids_by_client_request.get(
@@ -81,6 +86,7 @@ class InMemoryTicketRepository:
             self._tickets[ticket.id] = ticket
             self._ticket_ids_by_client_request[ticket.client_request_id] = ticket.id
             self._events_by_ticket[ticket.id] = [event]
+            self.notification_jobs.extend(notification_jobs)
             return ticket, True
 
     def list_for_resident(
@@ -169,6 +175,7 @@ class InMemoryTicketRepository:
         ticket: Ticket,
         expected_version: int,
         event: TicketEvent,
+        notification_jobs: tuple[NotificationJob, ...] = (),
     ) -> bool:
         with self._lock:
             current = self._tickets.get(ticket.id)
@@ -176,6 +183,7 @@ class InMemoryTicketRepository:
                 return False
             self._tickets[ticket.id] = ticket
             self._events_by_ticket.setdefault(ticket.id, []).append(event)
+            self.notification_jobs.extend(notification_jobs)
             return True
 
     def list_events(self, ticket_id: UUID) -> list[TicketEvent]:

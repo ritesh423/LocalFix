@@ -5,7 +5,12 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.database.models import TicketEventRecord, TicketRecord
+from app.database.models import (
+    NotificationOutboxRecord,
+    TicketEventRecord,
+    TicketRecord,
+)
+from app.domain.notifications import NotificationJob
 from app.domain.ticket_workflow import TicketAction, TicketStatus, UserRole
 from app.domain.tickets import (
     AccessWindow,
@@ -25,6 +30,7 @@ class SqlAlchemyTicketRepository:
         self,
         ticket: Ticket,
         event: TicketEvent,
+        notification_jobs: tuple[NotificationJob, ...] = (),
     ) -> tuple[Ticket, bool]:
         with self._session_factory() as session:
             existing = self._find_by_client_request_id(
@@ -37,6 +43,9 @@ class SqlAlchemyTicketRepository:
             record = _record_from_domain(ticket)
             session.add(record)
             session.add(_event_record_from_domain(event))
+            session.add_all(
+                _notification_record_from_domain(job) for job in notification_jobs
+            )
             try:
                 session.commit()
             except IntegrityError:
@@ -143,6 +152,7 @@ class SqlAlchemyTicketRepository:
         ticket: Ticket,
         expected_version: int,
         event: TicketEvent,
+        notification_jobs: tuple[NotificationJob, ...] = (),
     ) -> bool:
         statement = (
             update(TicketRecord)
@@ -173,6 +183,9 @@ class SqlAlchemyTicketRepository:
                 session.rollback()
                 return False
             session.add(_event_record_from_domain(event))
+            session.add_all(
+                _notification_record_from_domain(job) for job in notification_jobs
+            )
             session.commit()
             return True
 
@@ -291,6 +304,30 @@ def _event_record_to_domain(record: TicketEventRecord) -> TicketEvent:
         ticket_version=record.ticket_version,
         detail=record.detail,
         created_at=_ensure_utc(record.created_at),
+    )
+
+
+def _notification_record_from_domain(
+    job: NotificationJob,
+) -> NotificationOutboxRecord:
+    return NotificationOutboxRecord(
+        id=job.id,
+        deduplication_key=job.deduplication_key,
+        ticket_id=job.ticket_id,
+        property_id=job.property_id,
+        recipient_role=job.recipient_role.value,
+        recipient_user_id=job.recipient_user_id,
+        kind=job.kind.value,
+        title=job.title,
+        body=job.body,
+        data=job.data,
+        status=job.status.value,
+        attempt_count=job.attempt_count,
+        available_at=job.available_at,
+        last_error=job.last_error,
+        sent_at=job.sent_at,
+        created_at=job.created_at,
+        updated_at=job.updated_at,
     )
 
 

@@ -14,11 +14,18 @@ from app.repositories.device_registrations import (
     DeviceRegistrationRepository,
     InMemoryDeviceRegistrationRepository,
 )
+from app.repositories.notification_outbox import (
+    InMemoryNotificationOutboxRepository,
+    NotificationOutboxRepository,
+)
 from app.repositories.sqlalchemy_device_registrations import (
     SqlAlchemyDeviceRegistrationRepository,
 )
+from app.repositories.sqlalchemy_notification_outbox import (
+    SqlAlchemyNotificationOutboxRepository,
+)
 from app.repositories.sqlalchemy_tickets import SqlAlchemyTicketRepository
-from app.repositories.tickets import TicketRepository
+from app.repositories.tickets import InMemoryTicketRepository, TicketRepository
 from app.storage.evidence import EvidenceStorage, LocalEvidenceStorage
 
 
@@ -26,10 +33,11 @@ def create_app(
     repository: TicketRepository | None = None,
     evidence_storage: EvidenceStorage | None = None,
     device_registration_repository: DeviceRegistrationRepository | None = None,
+    notification_outbox_repository: NotificationOutboxRepository | None = None,
 ) -> FastAPI:
     application = FastAPI(
         title="LocalFix API",
-        version="0.9.0",
+        version="0.10.0",
         description="Apartment maintenance workflow API.",
     )
     session_factory = None
@@ -44,8 +52,23 @@ def create_app(
             if session_factory is not None
             else InMemoryDeviceRegistrationRepository()
         )
+    if notification_outbox_repository is None:
+        if session_factory is not None:
+            notification_outbox_repository = SqlAlchemyNotificationOutboxRepository(
+                session_factory
+            )
+        else:
+            in_memory_jobs = (
+                repository.notification_jobs
+                if isinstance(repository, InMemoryTicketRepository)
+                else []
+            )
+            notification_outbox_repository = InMemoryNotificationOutboxRepository(
+                in_memory_jobs
+            )
     application.state.ticket_repository = repository
     application.state.device_registration_repository = device_registration_repository
+    application.state.notification_outbox_repository = notification_outbox_repository
     application.state.evidence_storage = evidence_storage or LocalEvidenceStorage(
         Path(get_evidence_directory())
     )

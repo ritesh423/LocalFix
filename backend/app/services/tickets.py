@@ -23,6 +23,7 @@ from app.domain.tickets import (
     WorkerContext,
 )
 from app.repositories.tickets import TicketRepository
+from app.services.notifications import TicketNotificationPlanner
 from app.storage.evidence import EvidenceStorage, StoredEvidence
 
 
@@ -118,6 +119,7 @@ class TicketService:
         self._repository = repository
         self._workers = {worker.id: worker for worker in workers}
         self._evidence_storage = evidence_storage
+        self._notification_planner = TicketNotificationPlanner()
 
     def create_ticket(
         self,
@@ -151,17 +153,19 @@ class TicketService:
             created_at=now,
             updated_at=now,
         )
+        event = self._event(
+            ticket=candidate,
+            actor_role=UserRole.RESIDENT,
+            actor_id=resident.user_id,
+            action=TicketAction.CREATE,
+            from_status=None,
+            detail="Maintenance request created.",
+            created_at=now,
+        )
         ticket, was_created = self._repository.create(
             candidate,
-            self._event(
-                ticket=candidate,
-                actor_role=UserRole.RESIDENT,
-                actor_id=resident.user_id,
-                action=TicketAction.CREATE,
-                from_status=None,
-                detail="Maintenance request created.",
-                created_at=now,
-            ),
+            event,
+            self._notification_planner.plan(candidate, event),
         )
         return CreateTicketResult(ticket=ticket, was_created=was_created)
 
@@ -280,17 +284,22 @@ class TicketService:
             version=ticket.version + 1,
             updated_at=datetime.now(UTC),
         )
+        event = self._event(
+            ticket=started_ticket,
+            actor_role=UserRole.WORKER,
+            actor_id=worker.worker_id,
+            action=TicketAction.START,
+            from_status=ticket.status,
+            detail="Worker started the repair.",
+            created_at=started_ticket.updated_at,
+        )
         was_updated = self._repository.update_if_version(
             started_ticket,
             expected_version=command.expected_version,
-            event=self._event(
-                ticket=started_ticket,
-                actor_role=UserRole.WORKER,
-                actor_id=worker.worker_id,
-                action=TicketAction.START,
-                from_status=ticket.status,
-                detail="Worker started the repair.",
-                created_at=started_ticket.updated_at,
+            event=event,
+            notification_jobs=self._notification_planner.plan(
+                started_ticket,
+                event,
             ),
         )
         if not was_updated:
@@ -340,18 +349,23 @@ class TicketService:
             version=ticket.version + 1,
             updated_at=submitted_at,
         )
+        event = self._event(
+            ticket=completed_ticket,
+            actor_role=UserRole.WORKER,
+            actor_id=worker.worker_id,
+            action=TicketAction.SUBMIT_PROOF,
+            from_status=ticket.status,
+            detail=note,
+            created_at=submitted_at,
+        )
         try:
             was_updated = self._repository.update_if_version(
                 completed_ticket,
                 expected_version=command.expected_version,
-                event=self._event(
-                    ticket=completed_ticket,
-                    actor_role=UserRole.WORKER,
-                    actor_id=worker.worker_id,
-                    action=TicketAction.SUBMIT_PROOF,
-                    from_status=ticket.status,
-                    detail=note,
-                    created_at=submitted_at,
+                event=event,
+                notification_jobs=self._notification_planner.plan(
+                    completed_ticket,
+                    event,
                 ),
             )
         except Exception:
@@ -430,20 +444,23 @@ class TicketService:
             resident_reviewed_at=reviewed_at,
             updated_at=reviewed_at,
         )
+        event = self._event(
+            ticket=reviewed_ticket,
+            actor_role=UserRole.RESIDENT,
+            actor_id=resident.user_id,
+            action=action,
+            from_status=ticket.status,
+            detail=feedback
+            or f"Resident confirmed the repair with a {command.rating}-star rating.",
+            created_at=reviewed_at,
+        )
         was_updated = self._repository.update_if_version(
             reviewed_ticket,
             expected_version=command.expected_version,
-            event=self._event(
-                ticket=reviewed_ticket,
-                actor_role=UserRole.RESIDENT,
-                actor_id=resident.user_id,
-                action=action,
-                from_status=ticket.status,
-                detail=feedback
-                or (
-                    f"Resident confirmed the repair with a {command.rating}-star rating."
-                ),
-                created_at=reviewed_at,
+            event=event,
+            notification_jobs=self._notification_planner.plan(
+                reviewed_ticket,
+                event,
             ),
         )
         if not was_updated:
@@ -515,19 +532,24 @@ class TicketService:
             assigned_worker=worker.name,
             updated_at=datetime.now(UTC),
         )
+        event = self._event(
+            ticket=assigned_ticket,
+            actor_role=UserRole.MANAGER,
+            actor_id=manager.user_id,
+            action=TicketAction.ASSIGN,
+            from_status=ticket.status,
+            detail=(
+                f"Assigned to {worker.name} with {command.priority.value} priority."
+            ),
+            created_at=assigned_ticket.updated_at,
+        )
         was_updated = self._repository.update_if_version(
             assigned_ticket,
             expected_version=command.expected_version,
-            event=self._event(
-                ticket=assigned_ticket,
-                actor_role=UserRole.MANAGER,
-                actor_id=manager.user_id,
-                action=TicketAction.ASSIGN,
-                from_status=ticket.status,
-                detail=(
-                    f"Assigned to {worker.name} with {command.priority.value} priority."
-                ),
-                created_at=assigned_ticket.updated_at,
+            event=event,
+            notification_jobs=self._notification_planner.plan(
+                assigned_ticket,
+                event,
             ),
         )
         if not was_updated:

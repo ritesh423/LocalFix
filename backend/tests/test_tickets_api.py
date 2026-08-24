@@ -4,6 +4,8 @@ from uuid import UUID, uuid4
 from fastapi.testclient import TestClient
 
 from app.api.dependencies import DEMO_RESIDENT_CONTEXT
+from app.domain.notifications import NotificationKind, NotificationStatus
+from app.domain.ticket_workflow import UserRole
 from app.domain.tickets import (
     AccessWindow,
     ResidentContext,
@@ -108,6 +110,50 @@ class TicketsApiTest(unittest.TestCase):
         self.assertEqual(retry_response.status_code, 200)
         self.assertEqual(retry_response.json()["id"], first_response.json()["id"])
         self.assertEqual(len(list_response.json()), 1)
+        self.assertEqual(len(self.repository.notification_jobs), 1)
+
+    def test_workflow_notifications_target_the_person_who_needs_to_act(self) -> None:
+        completed = self.create_completed_ticket()
+        review = self.client.post(
+            f"/tickets/{completed['id']}/review",
+            json={
+                "expected_version": completed["version"],
+                "decision": "confirm",
+                "rating": 5,
+            },
+        )
+
+        self.assertEqual(review.status_code, 200)
+        jobs = self.repository.notification_jobs
+        self.assertEqual(
+            [job.kind for job in jobs],
+            [
+                NotificationKind.NEW_REQUEST,
+                NotificationKind.JOB_ASSIGNED,
+                NotificationKind.WORK_STARTED,
+                NotificationKind.READY_FOR_REVIEW,
+                NotificationKind.REPAIR_CONFIRMED,
+            ],
+        )
+        self.assertEqual(
+            [job.recipient_role for job in jobs],
+            [
+                UserRole.MANAGER,
+                UserRole.WORKER,
+                UserRole.RESIDENT,
+                UserRole.RESIDENT,
+                UserRole.WORKER,
+            ],
+        )
+        self.assertIsNone(jobs[0].recipient_user_id)
+        self.assertEqual(
+            jobs[1].recipient_user_id,
+            UUID("40000000-0000-0000-0000-000000000001"),
+        )
+        self.assertEqual(jobs[2].recipient_user_id, DEMO_RESIDENT_CONTEXT.user_id)
+        self.assertTrue(all(job.status is NotificationStatus.PENDING for job in jobs))
+        self.assertEqual(jobs[-1].data["ticket_id"], completed["id"])
+        self.assertEqual(len({job.deduplication_key for job in jobs}), len(jobs))
 
     def test_invalid_ticket_is_rejected_with_the_api_error_contract(self) -> None:
         payload = self.ticket_payload()
@@ -532,6 +578,9 @@ class TicketsApiTest(unittest.TestCase):
             reviewed["resident_feedback"],
             "The pipe is still dripping near the lower joint.",
         )
+        notification = self.repository.notification_jobs[-1]
+        self.assertEqual(notification.kind, NotificationKind.REWORK_REQUESTED)
+        self.assertEqual(notification.recipient_role, UserRole.WORKER)
 
     def test_ticket_history_records_the_full_rework_journey_for_each_role(
         self,

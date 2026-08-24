@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -15,6 +16,7 @@ from app.api.dependencies import (
 )
 from app.database.session import create_database_engine, create_session_factory
 from app.domain.device_registrations import DevicePlatform
+from app.domain.notifications import NotificationKind
 from app.domain.ticket_workflow import UserRole
 from app.domain.tickets import (
     AccessWindow,
@@ -26,6 +28,9 @@ from app.domain.tickets import (
 )
 from app.repositories.sqlalchemy_device_registrations import (
     SqlAlchemyDeviceRegistrationRepository,
+)
+from app.repositories.sqlalchemy_notification_outbox import (
+    SqlAlchemyNotificationOutboxRepository,
 )
 from app.repositories.sqlalchemy_tickets import SqlAlchemyTicketRepository
 from app.services.device_registrations import DeviceRegistrationService
@@ -163,6 +168,42 @@ class SqlAlchemyTicketRepositoryTest(unittest.TestCase):
         self.assertEqual(restored.priority, TicketPriority.URGENT)
         self.assertEqual(restored.assigned_worker, "Arun Kumar")
         self.assertEqual(restored.status.value, "assigned")
+
+    def test_notification_outbox_survives_engine_recreation(self) -> None:
+        first_engine = create_database_engine(self.database_url)
+        first_session_factory = create_session_factory(first_engine)
+        first_service = TicketService(
+            SqlAlchemyTicketRepository(first_session_factory),
+            workers=DEMO_WORKERS,
+        )
+        created = first_service.create_ticket(
+            self.ticket_command(),
+            DEMO_RESIDENT_CONTEXT,
+        ).ticket
+        first_service.assign_ticket(
+            created.id,
+            AssignTicketCommand(
+                expected_version=created.version,
+                priority=TicketPriority.SOON,
+                worker_id=DEMO_WORKER_CONTEXT.worker_id,
+            ),
+            DEMO_MANAGER_CONTEXT,
+        )
+        first_engine.dispose()
+
+        second_engine = create_database_engine(self.database_url)
+        jobs = SqlAlchemyNotificationOutboxRepository(
+            create_session_factory(second_engine)
+        ).list_ready(datetime.now(UTC))
+        second_engine.dispose()
+
+        self.assertEqual(
+            [job.kind for job in jobs],
+            [NotificationKind.NEW_REQUEST, NotificationKind.JOB_ASSIGNED],
+        )
+        self.assertIsNone(jobs[0].recipient_user_id)
+        self.assertEqual(jobs[1].recipient_user_id, DEMO_WORKER_CONTEXT.worker_id)
+        self.assertEqual(jobs[0].ticket_id, created.id)
 
     def test_worker_start_survives_engine_recreation(self) -> None:
         first_engine = create_database_engine(self.database_url)
@@ -343,6 +384,12 @@ class SqlAlchemyTicketRepositoryTest(unittest.TestCase):
                 "device_registrations"
             )
         }
+        outbox_index_names = {
+            index["name"]
+            for index in inspect(migrated_engine).get_indexes(
+                "notification_outbox"
+            )
+        }
         with migrated_engine.connect() as connection:
             restored_title = connection.scalar(
                 text("SELECT title FROM tickets WHERE id = :id"),
@@ -371,6 +418,8 @@ class SqlAlchemyTicketRepositoryTest(unittest.TestCase):
         self.assertIn("ix_tickets_worker_status_updated", index_names)
         self.assertIn("ix_ticket_events_ticket_created", event_index_names)
         self.assertIn("ix_device_registrations_recipient", device_index_names)
+        self.assertIn("ix_notification_outbox_delivery", outbox_index_names)
+        self.assertIn("ix_notification_outbox_recipient", outbox_index_names)
         self.assertEqual(restored_title, "Existing ticket")
         self.assertEqual(
             tuple(baseline_event),

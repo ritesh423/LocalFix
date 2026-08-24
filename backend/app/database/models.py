@@ -43,6 +43,53 @@ class DeviceRegistrationRecord(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
+class NotificationOutboxRecord(Base):
+    __tablename__ = "notification_outbox"
+    __table_args__ = (
+        Index(
+            "ix_notification_outbox_delivery",
+            "status",
+            "available_at",
+            "created_at",
+        ),
+        Index(
+            "ix_notification_outbox_recipient",
+            "property_id",
+            "recipient_role",
+            "recipient_user_id",
+        ),
+        UniqueConstraint(
+            "deduplication_key",
+            name="uq_notification_outbox_deduplication_key",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
+    deduplication_key: Mapped[str] = mapped_column(String(255))
+    ticket_id: Mapped[UUID] = mapped_column(
+        Uuid(),
+        ForeignKey("tickets.id"),
+        nullable=False,
+    )
+    property_id: Mapped[UUID] = mapped_column(Uuid())
+    recipient_role: Mapped[str] = mapped_column(String(32))
+    recipient_user_id: Mapped[UUID | None] = mapped_column(Uuid(), nullable=True)
+    kind: Mapped[str] = mapped_column(String(64))
+    title: Mapped[str] = mapped_column(String(120))
+    body: Mapped[str] = mapped_column(String(500))
+    data: Mapped[dict[str, str]] = mapped_column(JSON)
+    status: Mapped[str] = mapped_column(String(32))
+    attempt_count: Mapped[int] = mapped_column(Integer)
+    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 class TicketRecord(Base):
     __tablename__ = "tickets"
     __table_args__ = (
