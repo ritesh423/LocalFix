@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.database.models import NotificationOutboxRecord
@@ -33,6 +33,26 @@ class SqlAlchemyNotificationOutboxRepository:
         with self._session_factory() as session:
             records = session.scalars(statement).all()
             return [_record_to_domain(record) for record in records]
+
+    def update(self, job: NotificationJob) -> None:
+        statement = (
+            update(NotificationOutboxRecord)
+            .where(NotificationOutboxRecord.id == job.id)
+            .values(
+                status=job.status.value,
+                attempt_count=job.attempt_count,
+                available_at=job.available_at,
+                last_error=job.last_error,
+                sent_at=job.sent_at,
+                updated_at=job.updated_at,
+            )
+        )
+        with self._session_factory() as session:
+            result = session.execute(statement)
+            if result.rowcount != 1:
+                session.rollback()
+                raise LookupError(f"Notification job {job.id} was not found.")
+            session.commit()
 
 
 def _record_to_domain(record: NotificationOutboxRecord) -> NotificationJob:

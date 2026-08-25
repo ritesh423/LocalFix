@@ -50,6 +50,23 @@ class SqlAlchemyDeviceRegistrationRepository:
             record = session.get(DeviceRegistrationRecord, installation_id)
             return _record_to_domain(record) if record is not None else None
 
+    def list_for_recipient(
+        self,
+        property_id: UUID,
+        role: UserRole,
+        user_id: UUID | None,
+    ) -> list[DeviceRegistration]:
+        statement = select(DeviceRegistrationRecord).where(
+            DeviceRegistrationRecord.property_id == property_id,
+            DeviceRegistrationRecord.role == role.value,
+        )
+        if user_id is not None:
+            statement = statement.where(DeviceRegistrationRecord.user_id == user_id)
+        statement = statement.order_by(DeviceRegistrationRecord.updated_at.desc())
+        with self._session_factory() as session:
+            records = session.scalars(statement).all()
+            return [_record_to_domain(record) for record in records]
+
 
 def _record_to_domain(record: DeviceRegistrationRecord) -> DeviceRegistration:
     return DeviceRegistration(

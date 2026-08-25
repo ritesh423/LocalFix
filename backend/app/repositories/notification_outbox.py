@@ -11,6 +11,8 @@ class NotificationOutboxRepository(Protocol):
         limit: int = 100,
     ) -> list[NotificationJob]: ...
 
+    def update(self, job: NotificationJob) -> None: ...
+
 
 class InMemoryNotificationOutboxRepository:
     def __init__(self, jobs: list[NotificationJob]) -> None:
@@ -27,3 +29,10 @@ class InMemoryNotificationOutboxRepository:
             if job.status is NotificationStatus.PENDING and job.available_at <= now
         ]
         return sorted(ready, key=lambda job: job.created_at)[:limit]
+
+    def update(self, job: NotificationJob) -> None:
+        for index, existing in enumerate(self._jobs):
+            if existing.id == job.id:
+                self._jobs[index] = job
+                return
+        raise LookupError(f"Notification job {job.id} was not found.")

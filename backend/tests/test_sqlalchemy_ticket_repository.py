@@ -107,6 +107,13 @@ class SqlAlchemyTicketRepositoryTest(unittest.TestCase):
         restored = SqlAlchemyDeviceRegistrationRepository(
             create_session_factory(second_engine)
         ).get(installation_id)
+        matching = SqlAlchemyDeviceRegistrationRepository(
+            create_session_factory(second_engine)
+        ).list_for_recipient(
+            property_id=DEMO_RESIDENT_CONTEXT.property_id,
+            role=UserRole.RESIDENT,
+            user_id=DEMO_RESIDENT_CONTEXT.user_id,
+        )
         second_engine.dispose()
 
         self.assertIsNotNone(restored)
@@ -115,6 +122,10 @@ class SqlAlchemyTicketRepositoryTest(unittest.TestCase):
             "durable-firebase-installation-id",
         )
         self.assertEqual(restored.role, UserRole.RESIDENT)
+        self.assertEqual(
+            [registration.installation_id for registration in matching],
+            [installation_id],
+        )
 
     def test_sql_repository_hides_another_residents_ticket(self) -> None:
         engine = create_database_engine(self.database_url)

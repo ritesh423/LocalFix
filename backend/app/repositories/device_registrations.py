@@ -3,12 +3,20 @@ from typing import Protocol
 from uuid import UUID
 
 from app.domain.device_registrations import DeviceRegistration
+from app.domain.ticket_workflow import UserRole
 
 
 class DeviceRegistrationRepository(Protocol):
     def save(self, registration: DeviceRegistration) -> DeviceRegistration: ...
 
     def get(self, installation_id: UUID) -> DeviceRegistration | None: ...
+
+    def list_for_recipient(
+        self,
+        property_id: UUID,
+        role: UserRole,
+        user_id: UUID | None,
+    ) -> list[DeviceRegistration]: ...
 
 
 class InMemoryDeviceRegistrationRepository:
@@ -32,3 +40,21 @@ class InMemoryDeviceRegistrationRepository:
 
     def get(self, installation_id: UUID) -> DeviceRegistration | None:
         return self._registrations.get(installation_id)
+
+    def list_for_recipient(
+        self,
+        property_id: UUID,
+        role: UserRole,
+        user_id: UUID | None,
+    ) -> list[DeviceRegistration]:
+        return sorted(
+            (
+                registration
+                for registration in self._registrations.values()
+                if registration.property_id == property_id
+                and registration.role is role
+                and (user_id is None or registration.user_id == user_id)
+            ),
+            key=lambda registration: registration.updated_at,
+            reverse=True,
+        )
