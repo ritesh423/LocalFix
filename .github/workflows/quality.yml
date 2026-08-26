@@ -1,0 +1,81 @@
+name: Project checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: sqlite:///./ci-localfix.db
+
+    steps:
+      - name: Check out the project
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+
+      - name: Install backend dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Check Python code
+        run: ruff check app tests alembic
+
+      - name: Run backend tests
+        run: python -m unittest discover -s tests
+
+      - name: Verify a clean database upgrade
+        run: alembic upgrade head
+
+  android:
+    name: Android checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: android
+
+    steps:
+      - name: Check out the project
+        uses: actions/checkout@v6
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Test and build Android
+        run: >-
+          ./gradlew
+          testDebugUnitTest
+          lintDebug
+          assembleDebug
+          assembleDebugAndroidTest
+          --no-daemon
+          --stacktrace
