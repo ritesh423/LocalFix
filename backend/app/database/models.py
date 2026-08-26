@@ -3,6 +3,7 @@ from uuid import UUID
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     DateTime,
     ForeignKey,
     Index,
@@ -16,6 +17,31 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 class Base(DeclarativeBase):
     pass
+
+
+class PropertyMembershipRecord(Base):
+    __tablename__ = "property_memberships"
+    __table_args__ = (
+        Index(
+            "ix_property_memberships_firebase_uid",
+            "firebase_uid",
+            "is_active",
+        ),
+        UniqueConstraint(
+            "firebase_uid",
+            "property_id",
+            "role",
+            name="uq_property_memberships_identity_property_role",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
+    firebase_uid: Mapped[str] = mapped_column(String(128))
+    user_id: Mapped[UUID] = mapped_column(Uuid())
+    property_id: Mapped[UUID] = mapped_column(Uuid())
+    role: Mapped[str] = mapped_column(String(32))
+    unit_id: Mapped[UUID | None] = mapped_column(Uuid(), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean(), default=True)
 
 
 class DeviceRegistrationRecord(Base):

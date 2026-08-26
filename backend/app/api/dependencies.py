@@ -1,8 +1,11 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import Depends, Request
+from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from app.domain.auth import AuthenticatedIdentity
+from app.domain.ticket_workflow import UserRole
 from app.domain.tickets import (
     ManagerContext,
     ResidentContext,
@@ -10,7 +13,9 @@ from app.domain.tickets import (
     Worker,
     WorkerContext,
 )
+from app.gateways.identity import IdentityTokenVerifier, InvalidIdentityTokenError
 from app.repositories.device_registrations import DeviceRegistrationRepository
+from app.repositories.memberships import MembershipRepository
 from app.repositories.tickets import TicketRepository
 from app.services.device_registrations import DeviceRegistrationService
 from app.services.tickets import TicketService
@@ -56,6 +61,8 @@ DEMO_WORKER_CONTEXT = WorkerContext(
     property_id=DEMO_WORKERS[0].property_id,
 )
 
+bearer_token = HTTPBearer(auto_error=False)
+
 
 def get_ticket_repository(request: Request) -> TicketRepository:
     return request.app.state.ticket_repository
@@ -91,16 +98,114 @@ def get_device_registration_service(
     return DeviceRegistrationService(repository)
 
 
-def get_resident_context() -> ResidentContext:
-    return DEMO_RESIDENT_CONTEXT
+def get_identity_token_verifier(request: Request) -> IdentityTokenVerifier:
+    return request.app.state.identity_token_verifier
 
 
-def get_manager_context() -> ManagerContext:
-    return DEMO_MANAGER_CONTEXT
+def get_membership_repository(request: Request) -> MembershipRepository:
+    return request.app.state.membership_repository
 
 
-def get_worker_context() -> WorkerContext:
-    return DEMO_WORKER_CONTEXT
+def get_authenticated_identity(
+    credentials: Annotated[
+        HTTPAuthorizationCredentials | None,
+        Depends(bearer_token),
+    ],
+    verifier: Annotated[
+        IdentityTokenVerifier,
+        Depends(get_identity_token_verifier),
+    ],
+) -> AuthenticatedIdentity:
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        _raise_unauthenticated("Sign in to continue.")
+    try:
+        return verifier.verify(credentials.credentials)
+    except InvalidIdentityTokenError:
+        _raise_unauthenticated("Your sign-in has expired. Sign in again.")
+
+
+def get_request_identity(
+    request: Request,
+    credentials: Annotated[
+        HTTPAuthorizationCredentials | None,
+        Depends(bearer_token),
+    ],
+    verifier: Annotated[
+        IdentityTokenVerifier,
+        Depends(get_identity_token_verifier),
+    ],
+) -> AuthenticatedIdentity | None:
+    if not request.app.state.authentication_required:
+        return None
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        _raise_unauthenticated("Sign in to continue.")
+    try:
+        return verifier.verify(credentials.credentials)
+    except InvalidIdentityTokenError:
+        _raise_unauthenticated("Your sign-in has expired. Sign in again.")
+
+
+def get_resident_context(
+    identity: Annotated[AuthenticatedIdentity | None, Depends(get_request_identity)],
+    memberships: Annotated[
+        MembershipRepository,
+        Depends(get_membership_repository),
+    ],
+) -> ResidentContext:
+    if identity is None:
+        return DEMO_RESIDENT_CONTEXT
+    membership = memberships.find_active(identity.firebase_uid, UserRole.RESIDENT)
+    if membership is None:
+        _raise_forbidden("You do not have an active resident membership.")
+    try:
+        return membership.resident_context()
+    except ValueError:
+        _raise_forbidden("Your resident membership is missing an apartment unit.")
+
+
+def get_manager_context(
+    identity: Annotated[AuthenticatedIdentity | None, Depends(get_request_identity)],
+    memberships: Annotated[
+        MembershipRepository,
+        Depends(get_membership_repository),
+    ],
+) -> ManagerContext:
+    if identity is None:
+        return DEMO_MANAGER_CONTEXT
+    membership = memberships.find_active(identity.firebase_uid, UserRole.MANAGER)
+    if membership is None:
+        _raise_forbidden("You do not have an active manager membership.")
+    return membership.manager_context()
+
+
+def get_worker_context(
+    identity: Annotated[AuthenticatedIdentity | None, Depends(get_request_identity)],
+    memberships: Annotated[
+        MembershipRepository,
+        Depends(get_membership_repository),
+    ],
+) -> WorkerContext:
+    if identity is None:
+        return DEMO_WORKER_CONTEXT
+    membership = memberships.find_active(identity.firebase_uid, UserRole.WORKER)
+    if membership is None:
+        _raise_forbidden("You do not have an active worker membership.")
+    return membership.worker_context()
+
+
+def _raise_unauthenticated(message: str) -> None:
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail={"code": "authentication_required", "message": message},
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+def _raise_forbidden(message: str) -> None:
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail={"code": "membership_required", "message": message},
+    )
 
 
 TicketServiceDependency = Annotated[TicketService, Depends(get_ticket_service)]
@@ -119,4 +224,12 @@ WorkerContextDependency = Annotated[
 DeviceRegistrationServiceDependency = Annotated[
     DeviceRegistrationService,
     Depends(get_device_registration_service),
+]
+AuthenticatedIdentityDependency = Annotated[
+    AuthenticatedIdentity,
+    Depends(get_authenticated_identity),
+]
+MembershipRepositoryDependency = Annotated[
+    MembershipRepository,
+    Depends(get_membership_repository),
 ]
