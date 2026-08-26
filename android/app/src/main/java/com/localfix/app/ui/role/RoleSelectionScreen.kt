@@ -41,6 +41,7 @@ import com.localfix.app.ui.theme.LocalFixTheme
 fun RoleSelectionScreen(
     onRoleSelected: (AppRole) -> Unit,
     modifier: Modifier = Modifier,
+    roles: List<AppRole> = AppRole.entries,
 ) {
     LazyColumn(
         modifier = modifier
@@ -72,7 +73,7 @@ fun RoleSelectionScreen(
                 )
             }
         }
-        items(AppRole.entries) { role ->
+        items(roles) { role ->
             RoleCard(
                 role = role,
                 onClick = { onRoleSelected(role) },

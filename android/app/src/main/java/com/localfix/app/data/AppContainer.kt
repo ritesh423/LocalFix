@@ -4,6 +4,9 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.room.Room
+import com.localfix.app.data.auth.AuthRepository
+import com.localfix.app.data.auth.AuthTokenProvider
+import com.localfix.app.data.auth.FirebaseAuthRepository
 import com.localfix.app.R
 import com.localfix.app.data.command.RoomTicketCommandStore
 import com.localfix.app.data.command.TicketCommandSyncer
@@ -25,6 +28,7 @@ import com.localfix.app.data.notifications.DefaultFirebaseInstallationProvider
 import com.localfix.app.data.notifications.PushRegistrationManager
 import com.localfix.app.data.notifications.SharedPreferencesPushRegistrationStore
 import com.localfix.app.data.remote.HttpTicketApi
+import com.localfix.app.data.remote.AuthSessionApi
 import com.localfix.app.data.resident.ApiResidentRepository
 import com.localfix.app.data.resident.PendingRequestSyncer
 import com.localfix.app.data.resident.PendingReviewSyncer
@@ -43,6 +47,10 @@ interface AppContainer {
     val managerRepository: ManagerRepository
     val workerRepository: WorkerRepository
     val requestDraftRepository: RequestDraftRepository
+    val authRepository: AuthRepository?
+        get() = null
+    val authSessionApi: AuthSessionApi?
+        get() = null
     val pushRegistrationManager: PushRegistrationManager?
         get() = null
 }
@@ -65,10 +73,17 @@ class DefaultAppContainer(context: Context) : AppContainer {
     )
         .build()
 
+    override val authRepository: AuthRepository? = runCatching {
+        FirebaseAuthRepository()
+    }.getOrNull()
+
     private val ticketApi = HttpTicketApi(
         baseUrl = context.getString(R.string.api_base_url),
         contentResolver = context.contentResolver,
+        authTokenProvider = authRepository ?: AuthTokenProvider { null },
     )
+    override val authSessionApi: AuthSessionApi?
+        get() = ticketApi.takeIf { authRepository != null }
     override val pushRegistrationManager = PushRegistrationManager(
         api = ticketApi,
         store = SharedPreferencesPushRegistrationStore(

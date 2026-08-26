@@ -2,6 +2,7 @@ package com.localfix.app.data.remote
 
 import android.content.ContentResolver
 import android.net.Uri
+import com.localfix.app.data.auth.AuthTokenProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
@@ -154,8 +155,9 @@ data class TicketEventResponse(
 class HttpTicketApi(
     baseUrl: String,
     private val contentResolver: ContentResolver,
+    private val authTokenProvider: AuthTokenProvider = AuthTokenProvider { null },
     private val json: Json = Json { ignoreUnknownKeys = true },
-) : TicketApi, ManagerTicketApi, WorkerTicketApi, PushRegistrationApi {
+) : TicketApi, ManagerTicketApi, WorkerTicketApi, PushRegistrationApi, AuthSessionApi {
     private val baseUrl = baseUrl.trimEnd('/')
 
     override suspend fun createTicket(request: TicketCreatePayload): TicketResponse {
@@ -165,6 +167,11 @@ class HttpTicketApi(
             requestBody = json.encodeToString(request),
         )
         return json.decodeFromString(responseBody)
+    }
+
+    override suspend fun getAuthSession(): com.localfix.app.data.auth.AuthSession {
+        val responseBody = execute(method = "GET", path = "/auth/session")
+        return json.decodeFromString<AuthSessionResponse>(responseBody).toDomain()
     }
 
     override suspend fun registerPushDevice(
@@ -277,6 +284,7 @@ class HttpTicketApi(
             connection.doOutput = true
             connection.setChunkedStreamingMode(64 * 1024)
             connection.setRequestProperty("Accept", "application/json")
+            addAuthorizationHeader(connection)
             connection.setRequestProperty(
                 "Content-Type",
                 "multipart/form-data; boundary=$boundary",
@@ -337,6 +345,7 @@ class HttpTicketApi(
             connection.connectTimeout = CONNECT_TIMEOUT_MILLIS
             connection.readTimeout = READ_TIMEOUT_MILLIS
             connection.setRequestProperty("Accept", "application/json")
+            addAuthorizationHeader(connection)
             if (requestBody != null) {
                 connection.doOutput = true
                 connection.setRequestProperty("Content-Type", "application/json")
@@ -358,6 +367,12 @@ class HttpTicketApi(
             responseText
         } finally {
             connection.disconnect()
+        }
+    }
+
+    private suspend fun addAuthorizationHeader(connection: HttpURLConnection) {
+        authTokenProvider.getIdToken()?.takeIf(String::isNotBlank)?.let { token ->
+            connection.setRequestProperty("Authorization", "Bearer $token")
         }
     }
 
