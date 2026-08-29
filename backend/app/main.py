@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -48,7 +49,7 @@ def create_app(
     notification_outbox_repository: NotificationOutboxRepository | None = None,
     membership_repository: MembershipRepository | None = None,
     identity_token_verifier: IdentityTokenVerifier | None = None,
-    authentication_required: bool | None = None,
+    authentication_required: bool = False,
 ) -> FastAPI:
     application = FastAPI(
         title="LocalFix API",
@@ -95,11 +96,7 @@ def create_app(
         identity_token_verifier
         or FirebaseIdentityTokenVerifier(project_id=get_firebase_project_id())
     )
-    application.state.authentication_required = (
-        is_authentication_required()
-        if authentication_required is None
-        else authentication_required
-    )
+    application.state.authentication_required = authentication_required
     application.state.evidence_storage = evidence_storage or LocalEvidenceStorage(
         Path(get_evidence_directory())
     )
@@ -139,4 +136,5 @@ def create_app(
     return application
 
 
-app = create_app()
+load_dotenv()
+app = create_app(authentication_required=is_authentication_required())

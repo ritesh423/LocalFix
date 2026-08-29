@@ -15,6 +15,10 @@ class IdentityTokenVerifier(Protocol):
     def verify(self, token: str) -> AuthenticatedIdentity: ...
 
 
+class IdentityDirectory(Protocol):
+    def find_by_email(self, email: str) -> AuthenticatedIdentity | None: ...
+
+
 class FirebaseIdentityTokenVerifier:
     def __init__(self, project_id: str | None = None) -> None:
         try:
@@ -41,3 +45,23 @@ class FirebaseIdentityTokenVerifier:
     def _optional_text(value: object) -> str | None:
         text = str(value).strip() if value is not None else ""
         return text or None
+
+
+class FirebaseIdentityDirectory:
+    def __init__(self, project_id: str | None = None) -> None:
+        try:
+            self._app = firebase_admin.get_app()
+        except ValueError:
+            options = {"projectId": project_id} if project_id else None
+            self._app = firebase_admin.initialize_app(options=options)
+
+    def find_by_email(self, email: str) -> AuthenticatedIdentity | None:
+        try:
+            user = auth.get_user_by_email(email.strip(), app=self._app)
+        except auth.UserNotFoundError:
+            return None
+        return AuthenticatedIdentity(
+            firebase_uid=user.uid,
+            email=user.email,
+            display_name=user.display_name,
+        )

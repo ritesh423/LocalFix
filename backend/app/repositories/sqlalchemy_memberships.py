@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -24,6 +26,22 @@ class SqlAlchemyMembershipRepository:
                 )
             ).all()
             return [self._to_domain(record) for record in records]
+
+    def find(
+        self,
+        firebase_uid: str,
+        property_id: UUID,
+        role: UserRole,
+    ) -> PropertyMembership | None:
+        with self._session_factory() as session:
+            record = session.scalar(
+                select(PropertyMembershipRecord).where(
+                    PropertyMembershipRecord.firebase_uid == firebase_uid,
+                    PropertyMembershipRecord.property_id == property_id,
+                    PropertyMembershipRecord.role == role.value,
+                )
+            )
+            return self._to_domain(record) if record is not None else None
 
     def find_active(
         self,
