@@ -19,6 +19,35 @@ class Base(DeclarativeBase):
     pass
 
 
+class PropertyRecord(Base):
+    __tablename__ = "properties"
+
+    id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
+    name: Mapped[str] = mapped_column(String(120))
+    is_active: Mapped[bool] = mapped_column(Boolean(), default=True)
+
+
+class PropertyUnitRecord(Base):
+    __tablename__ = "property_units"
+    __table_args__ = (
+        UniqueConstraint(
+            "property_id",
+            "normalized_label",
+            name="uq_property_units_property_normalized_label",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
+    property_id: Mapped[UUID] = mapped_column(
+        Uuid(),
+        ForeignKey("properties.id"),
+        index=True,
+    )
+    label: Mapped[str] = mapped_column(String(80))
+    normalized_label: Mapped[str] = mapped_column(String(80))
+    is_active: Mapped[bool] = mapped_column(Boolean(), default=True)
+
+
 class PropertyMembershipRecord(Base):
     __tablename__ = "property_memberships"
     __table_args__ = (

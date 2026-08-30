@@ -16,6 +16,7 @@ from app.domain.tickets import (
 from app.gateways.identity import IdentityTokenVerifier, InvalidIdentityTokenError
 from app.repositories.device_registrations import DeviceRegistrationRepository
 from app.repositories.memberships import MembershipRepository
+from app.repositories.properties import PropertyRepository
 from app.repositories.tickets import TicketRepository
 from app.services.device_registrations import DeviceRegistrationService
 from app.services.tickets import TicketService
@@ -106,6 +107,10 @@ def get_membership_repository(request: Request) -> MembershipRepository:
     return request.app.state.membership_repository
 
 
+def get_property_repository(request: Request) -> PropertyRepository:
+    return request.app.state.property_repository
+
+
 def get_authenticated_identity(
     credentials: Annotated[
         HTTPAuthorizationCredentials | None,
@@ -151,12 +156,24 @@ def get_resident_context(
         MembershipRepository,
         Depends(get_membership_repository),
     ],
+    properties: Annotated[
+        PropertyRepository,
+        Depends(get_property_repository),
+    ],
 ) -> ResidentContext:
     if identity is None:
         return DEMO_RESIDENT_CONTEXT
     membership = memberships.find_active(identity.firebase_uid, UserRole.RESIDENT)
     if membership is None:
         _raise_forbidden("You do not have an active resident membership.")
+    _require_active_property(properties, membership.property_id)
+    unit = (
+        properties.get_unit(membership.property_id, membership.unit_id)
+        if membership.unit_id is not None
+        else None
+    )
+    if unit is None or not unit.is_active:
+        _raise_forbidden("Your apartment unit is not active for this property.")
     try:
         return membership.resident_context()
     except ValueError:
@@ -169,12 +186,17 @@ def get_manager_context(
         MembershipRepository,
         Depends(get_membership_repository),
     ],
+    properties: Annotated[
+        PropertyRepository,
+        Depends(get_property_repository),
+    ],
 ) -> ManagerContext:
     if identity is None:
         return DEMO_MANAGER_CONTEXT
     membership = memberships.find_active(identity.firebase_uid, UserRole.MANAGER)
     if membership is None:
         _raise_forbidden("You do not have an active manager membership.")
+    _require_active_property(properties, membership.property_id)
     return membership.manager_context()
 
 
@@ -184,13 +206,27 @@ def get_worker_context(
         MembershipRepository,
         Depends(get_membership_repository),
     ],
+    properties: Annotated[
+        PropertyRepository,
+        Depends(get_property_repository),
+    ],
 ) -> WorkerContext:
     if identity is None:
         return DEMO_WORKER_CONTEXT
     membership = memberships.find_active(identity.firebase_uid, UserRole.WORKER)
     if membership is None:
         _raise_forbidden("You do not have an active worker membership.")
+    _require_active_property(properties, membership.property_id)
     return membership.worker_context()
+
+
+def _require_active_property(
+    properties: PropertyRepository,
+    property_id: UUID,
+) -> None:
+    property_ = properties.get_property(property_id)
+    if property_ is None or not property_.is_active:
+        _raise_forbidden("Your LocalFix property is not active.")
 
 
 def _raise_unauthenticated(message: str) -> None:
@@ -232,4 +268,8 @@ AuthenticatedIdentityDependency = Annotated[
 MembershipRepositoryDependency = Annotated[
     MembershipRepository,
     Depends(get_membership_repository),
+]
+PropertyRepositoryDependency = Annotated[
+    PropertyRepository,
+    Depends(get_property_repository),
 ]

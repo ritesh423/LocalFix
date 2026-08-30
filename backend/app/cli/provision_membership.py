@@ -9,6 +9,7 @@ from app.database.session import create_database_engine, create_session_factory
 from app.domain.ticket_workflow import UserRole
 from app.gateways.identity import FirebaseIdentityDirectory
 from app.repositories.sqlalchemy_memberships import SqlAlchemyMembershipRepository
+from app.repositories.sqlalchemy_properties import SqlAlchemyPropertyRepository
 from app.services.memberships import (
     InvalidMembershipError,
     MembershipConflictError,
@@ -51,8 +52,10 @@ def main(arguments: list[str] | None = None) -> int:
             )
             return 1
 
+        session_factory = create_session_factory(engine)
         service = MembershipProvisioningService(
-            SqlAlchemyMembershipRepository(create_session_factory(engine))
+            SqlAlchemyMembershipRepository(session_factory),
+            SqlAlchemyPropertyRepository(session_factory),
         )
         result = service.provision(
             firebase_uid=identity.firebase_uid,

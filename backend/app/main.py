@@ -30,6 +30,7 @@ from app.repositories.notification_outbox import (
     InMemoryNotificationOutboxRepository,
     NotificationOutboxRepository,
 )
+from app.repositories.properties import InMemoryPropertyRepository, PropertyRepository
 from app.repositories.sqlalchemy_device_registrations import (
     SqlAlchemyDeviceRegistrationRepository,
 )
@@ -37,6 +38,7 @@ from app.repositories.sqlalchemy_memberships import SqlAlchemyMembershipReposito
 from app.repositories.sqlalchemy_notification_outbox import (
     SqlAlchemyNotificationOutboxRepository,
 )
+from app.repositories.sqlalchemy_properties import SqlAlchemyPropertyRepository
 from app.repositories.sqlalchemy_tickets import SqlAlchemyTicketRepository
 from app.repositories.tickets import InMemoryTicketRepository, TicketRepository
 from app.storage.evidence import EvidenceStorage, LocalEvidenceStorage
@@ -48,12 +50,13 @@ def create_app(
     device_registration_repository: DeviceRegistrationRepository | None = None,
     notification_outbox_repository: NotificationOutboxRepository | None = None,
     membership_repository: MembershipRepository | None = None,
+    property_repository: PropertyRepository | None = None,
     identity_token_verifier: IdentityTokenVerifier | None = None,
     authentication_required: bool = False,
 ) -> FastAPI:
     application = FastAPI(
         title="LocalFix API",
-        version="0.11.0",
+        version="0.12.0",
         description="Apartment maintenance workflow API.",
     )
     session_factory = None
@@ -88,10 +91,17 @@ def create_app(
             if session_factory is not None
             else InMemoryMembershipRepository()
         )
+    if property_repository is None:
+        property_repository = (
+            SqlAlchemyPropertyRepository(session_factory)
+            if session_factory is not None
+            else InMemoryPropertyRepository()
+        )
     application.state.ticket_repository = repository
     application.state.device_registration_repository = device_registration_repository
     application.state.notification_outbox_repository = notification_outbox_repository
     application.state.membership_repository = membership_repository
+    application.state.property_repository = property_repository
     application.state.identity_token_verifier = (
         identity_token_verifier
         or FirebaseIdentityTokenVerifier(project_id=get_firebase_project_id())

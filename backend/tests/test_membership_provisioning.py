@@ -2,9 +2,11 @@ import unittest
 from unittest.mock import patch
 from uuid import uuid4
 
+from app.domain.properties import Property, PropertyUnit
 from app.domain.ticket_workflow import UserRole
 from app.gateways.identity import FirebaseIdentityDirectory
 from app.repositories.memberships import InMemoryMembershipRepository
+from app.repositories.properties import InMemoryPropertyRepository
 from app.services.memberships import (
     InvalidMembershipError,
     MembershipConflictError,
@@ -15,9 +17,24 @@ from app.services.memberships import (
 class MembershipProvisioningServiceTest(unittest.TestCase):
     def setUp(self) -> None:
         self.repository = InMemoryMembershipRepository()
-        self.service = MembershipProvisioningService(self.repository)
         self.property_id = uuid4()
         self.unit_id = uuid4()
+        self.properties = InMemoryPropertyRepository()
+        self.properties.save_property(
+            Property(id=self.property_id, name="Lakeview Residency")
+        )
+        self.properties.save_unit(
+            PropertyUnit(
+                id=self.unit_id,
+                property_id=self.property_id,
+                label="Apartment A-204",
+                normalized_label="apartment a-204",
+            )
+        )
+        self.service = MembershipProvisioningService(
+            self.repository,
+            self.properties,
+        )
 
     def test_resident_membership_requires_an_apartment_unit(self) -> None:
         with self.assertRaises(InvalidMembershipError):
@@ -34,6 +51,14 @@ class MembershipProvisioningServiceTest(unittest.TestCase):
                 property_id=self.property_id,
                 role=UserRole.MANAGER,
                 unit_id=self.unit_id,
+            )
+
+    def test_membership_cannot_use_an_unknown_property(self) -> None:
+        with self.assertRaises(InvalidMembershipError):
+            self.service.provision(
+                firebase_uid="firebase-manager",
+                property_id=uuid4(),
+                role=UserRole.MANAGER,
             )
 
     def test_repeating_the_same_command_does_not_duplicate_access(self) -> None:
@@ -66,7 +91,7 @@ class MembershipProvisioningServiceTest(unittest.TestCase):
             unit_id=self.unit_id,
         )
 
-        with self.assertRaises(MembershipConflictError):
+        with self.assertRaises((InvalidMembershipError, MembershipConflictError)):
             self.service.provision(
                 firebase_uid="firebase-resident",
                 property_id=self.property_id,

@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 
 from app.domain.auth import AuthenticatedIdentity, PropertyMembership
+from app.domain.properties import Property, PropertyUnit
 
 
 class AuthenticatedUserResponse(BaseModel):
@@ -22,17 +23,26 @@ class AuthenticatedUserResponse(BaseModel):
 
 class MembershipResponse(BaseModel):
     property_id: str
+    property_name: str | None
     user_id: str
     role: str
     unit_id: str | None
+    unit_label: str | None
 
     @classmethod
-    def from_domain(cls, membership: PropertyMembership) -> "MembershipResponse":
+    def from_domain(
+        cls,
+        membership: PropertyMembership,
+        property_: Property | None,
+        unit: PropertyUnit | None,
+    ) -> "MembershipResponse":
         return cls(
             property_id=str(membership.property_id),
+            property_name=property_.name if property_ else None,
             user_id=str(membership.user_id),
             role=membership.role.value,
             unit_id=str(membership.unit_id) if membership.unit_id else None,
+            unit_label=unit.label if unit else None,
         )
 
 

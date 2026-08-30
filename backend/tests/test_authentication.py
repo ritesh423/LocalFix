@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from app.database.models import Base
 from app.database.session import create_database_engine, create_session_factory
 from app.domain.auth import AuthenticatedIdentity, PropertyMembership
+from app.domain.properties import Property, PropertyUnit
 from app.domain.ticket_workflow import UserRole
 from app.gateways.identity import (
     FirebaseIdentityTokenVerifier,
@@ -14,6 +15,7 @@ from app.gateways.identity import (
 )
 from app.main import create_app
 from app.repositories.memberships import InMemoryMembershipRepository
+from app.repositories.properties import InMemoryPropertyRepository
 from app.repositories.sqlalchemy_memberships import (
     SqlAlchemyMembershipRepository,
 )
@@ -35,6 +37,7 @@ class AuthenticationApiTest(unittest.TestCase):
     def setUp(self) -> None:
         self.ticket_repository = InMemoryTicketRepository()
         self.memberships = InMemoryMembershipRepository()
+        self.properties = InMemoryPropertyRepository()
         self.resident_membership = PropertyMembership(
             id=uuid4(),
             firebase_uid="firebase-resident-123",
@@ -44,10 +47,25 @@ class AuthenticationApiTest(unittest.TestCase):
             role=UserRole.RESIDENT,
         )
         self.memberships.save(self.resident_membership)
+        self.properties.save_property(
+            Property(
+                id=self.resident_membership.property_id,
+                name="Lakeview Residency",
+            )
+        )
+        self.properties.save_unit(
+            PropertyUnit(
+                id=self.resident_membership.unit_id,
+                property_id=self.resident_membership.property_id,
+                label="Apartment A-204",
+                normalized_label="apartment a-204",
+            )
+        )
         self.client = TestClient(
             create_app(
                 self.ticket_repository,
                 membership_repository=self.memberships,
+                property_repository=self.properties,
                 identity_token_verifier=FakeIdentityTokenVerifier(),
                 authentication_required=True,
             )
@@ -85,6 +103,14 @@ class AuthenticationApiTest(unittest.TestCase):
         self.assertEqual(
             session["memberships"][0]["property_id"],
             str(self.resident_membership.property_id),
+        )
+        self.assertEqual(
+            session["memberships"][0]["property_name"],
+            "Lakeview Residency",
+        )
+        self.assertEqual(
+            session["memberships"][0]["unit_label"],
+            "Apartment A-204",
         )
         self.assertNotIn("manager", {item["role"] for item in session["memberships"]})
 

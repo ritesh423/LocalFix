@@ -4,6 +4,7 @@ from uuid import UUID, uuid4, uuid5
 from app.domain.auth import PropertyMembership
 from app.domain.ticket_workflow import UserRole
 from app.repositories.memberships import MembershipRepository
+from app.repositories.properties import PropertyRepository
 
 LOCALFIX_USER_NAMESPACE = UUID("5e59e1e9-433f-4f68-ae7a-ad585377b285")
 
@@ -23,8 +24,13 @@ class ProvisionMembershipResult:
 
 
 class MembershipProvisioningService:
-    def __init__(self, repository: MembershipRepository) -> None:
+    def __init__(
+        self,
+        repository: MembershipRepository,
+        properties: PropertyRepository,
+    ) -> None:
         self._repository = repository
+        self._properties = properties
 
     def provision(
         self,
@@ -45,6 +51,15 @@ class MembershipProvisioningService:
             raise InvalidMembershipError(
                 "Only resident memberships can include a unit ID."
             )
+        property_ = self._properties.get_property(property_id)
+        if property_ is None or not property_.is_active:
+            raise InvalidMembershipError("Property is not registered or active.")
+        if role is UserRole.RESIDENT:
+            unit = self._properties.get_unit(property_id, unit_id)
+            if unit is None or not unit.is_active:
+                raise InvalidMembershipError(
+                    "Unit is not registered for this property or is inactive."
+                )
 
         resolved_user_id = user_id or uuid5(
             LOCALFIX_USER_NAMESPACE,
