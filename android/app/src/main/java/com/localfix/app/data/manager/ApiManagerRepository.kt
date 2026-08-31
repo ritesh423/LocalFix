@@ -61,9 +61,15 @@ class ApiManagerRepository(
                 units = ticketApi.listManagerUnits(),
             )
         }.onSuccess { response ->
+            val unitsById = response.units.associateBy(ManagerPropertyUnitResponse::id)
             serverData.update { data ->
                 data.copy(
-                    tickets = response.tickets.map { it.toManagerTicket(clock) },
+                    tickets = response.tickets.map { ticket ->
+                        ticket.toManagerTicket(
+                            clock = clock,
+                            unitLabel = unitsById[ticket.unitId]?.label,
+                        )
+                    },
                     workers = response.workers.map(WorkerResponse::toManagerWorker),
                     summary = response.summary.toManagerSummary(),
                     units = response.units.map(ManagerPropertyUnitResponse::toDomain),
@@ -190,10 +196,13 @@ private fun ManagerData.withPendingAssignments(
     )
 }
 
-private fun TicketResponse.toManagerTicket(clock: Clock): ManagerTicket = ManagerTicket(
+private fun TicketResponse.toManagerTicket(
+    clock: Clock,
+    unitLabel: String? = null,
+): ManagerTicket = ManagerTicket(
     id = id,
     reference = if (id.startsWith("LF-")) id else "LF-${id.take(8).uppercase()}",
-    unitLabel = unitId.toUnitLabel(),
+    unitLabel = unitLabel ?: unitId.toUnitLabel(),
     title = title,
     description = description,
     category = ServiceCategory.valueOf(category.uppercase()),

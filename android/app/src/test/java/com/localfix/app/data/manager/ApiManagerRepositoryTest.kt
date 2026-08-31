@@ -8,6 +8,7 @@ import com.localfix.app.data.model.TicketCommandType
 import com.localfix.app.data.model.TicketStatus
 import com.localfix.app.data.remote.ManagerTicketApi
 import com.localfix.app.data.remote.ManagerSummaryResponse
+import com.localfix.app.data.remote.ManagerPropertyUnitResponse
 import com.localfix.app.data.remote.TicketAssignmentPayload
 import com.localfix.app.data.remote.TicketResponse
 import com.localfix.app.data.remote.WorkerResponse
@@ -44,7 +45,7 @@ class ApiManagerRepositoryTest {
         runCurrent()
 
         val data = repository.managerData.value
-        assertEquals("Apartment A-204", data.tickets.single().unitLabel)
+        assertEquals("Tower One · A-204", data.tickets.single().unitLabel)
         assertEquals(TicketStatus.OPEN, data.tickets.single().status)
         assertEquals("Updated 15 min ago", data.tickets.single().updatedLabel)
         assertEquals(ServiceCategory.PLUMBING, data.workers.single().specialty)
@@ -170,6 +171,13 @@ class ApiManagerRepositoryTest {
             blocked = 0,
             awaitingConfirmation = 0,
             completed = 0,
+        )
+
+        override suspend fun listManagerUnits() = listOf(
+            ManagerPropertyUnitResponse(
+                id = "30000000-0000-0000-0000-000000000204",
+                label = "Tower One · A-204",
+            ),
         )
 
         override suspend fun assignTicket(

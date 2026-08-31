@@ -65,8 +65,12 @@ fun ResidentProfileScreen(
             Column {
                 ProfileDetail(Icons.Outlined.Apartment, "Property", uiState.propertyName)
                 ProfileDetail(Icons.Outlined.HomeWork, "Home", uiState.unitLabel)
-                ProfileDetail(Icons.Outlined.Phone, "Phone", uiState.phone)
-                ProfileDetail(Icons.Outlined.Email, "Email", uiState.email)
+                if (uiState.phone.isNotBlank()) {
+                    ProfileDetail(Icons.Outlined.Phone, "Phone", uiState.phone)
+                }
+                if (uiState.email.isNotBlank()) {
+                    ProfileDetail(Icons.Outlined.Email, "Email", uiState.email)
+                }
             }
         }
         OutlinedButton(

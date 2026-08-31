@@ -42,6 +42,7 @@ fun RoleSelectionScreen(
     onRoleSelected: (AppRole) -> Unit,
     modifier: Modifier = Modifier,
     roles: List<AppRole> = AppRole.entries,
+    propertyName: String = "Lakeview Residency",
 ) {
     LazyColumn(
         modifier = modifier
@@ -50,7 +51,7 @@ fun RoleSelectionScreen(
         contentPadding = PaddingValues(bottom = LocalFixSpacing.extraLarge),
     ) {
         item {
-            RoleSelectionHeader()
+            RoleSelectionHeader(propertyName)
         }
         item {
             Column(
@@ -87,7 +88,7 @@ fun RoleSelectionScreen(
 }
 
 @Composable
-private fun RoleSelectionHeader() {
+private fun RoleSelectionHeader(propertyName: String) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -121,7 +122,7 @@ private fun RoleSelectionHeader() {
         )
         Spacer(modifier = Modifier.height(LocalFixSpacing.small))
         Text(
-            text = "Lakeview Residency · Apartment operations",
+            text = "$propertyName · Apartment operations",
             color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.74f),
             style = MaterialTheme.typography.bodyLarge,
         )

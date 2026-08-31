@@ -19,6 +19,8 @@ import com.localfix.app.ui.worker.WorkerViewModel
 @Composable
 fun WorkerNavigation(
     repository: WorkerRepository,
+    propertyName: String? = null,
+    workerName: String? = null,
     onSwitchRole: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -35,7 +37,10 @@ fun WorkerNavigation(
     ) {
         composable(WORKER_QUEUE_ROUTE) {
             WorkerQueueScreen(
-                uiState = uiState.queue,
+                uiState = uiState.queue.copy(
+                    propertyName = propertyName ?: uiState.queue.propertyName,
+                    workerName = workerName ?: uiState.queue.workerName,
+                ),
                 onJobClick = { ticketId ->
                     workerViewModel.openJob(ticketId)
                     navController.navigate(workerJobRoute(ticketId))

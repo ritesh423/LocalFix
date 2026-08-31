@@ -32,6 +32,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.localfix.app.data.draft.RequestDraftRepository
 import com.localfix.app.data.resident.ResidentRepository
 import com.localfix.app.data.model.ServiceCategory
+import com.localfix.app.data.model.ResidentAccount
 import com.localfix.app.ui.create.CreateRequestScreen
 import com.localfix.app.ui.home.ResidentHomeScreen
 import com.localfix.app.ui.home.ServiceCategoryType
@@ -44,6 +45,7 @@ import com.localfix.app.ui.resident.ResidentViewModel
 fun ResidentNavigation(
     repository: ResidentRepository,
     requestDraftRepository: RequestDraftRepository,
+    account: ResidentAccount? = null,
     onSwitchRole: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -116,7 +118,13 @@ fun ResidentNavigation(
         ) {
             composable(ResidentDestination.HOME.route) {
                 ResidentHomeScreen(
-                    uiState = uiState.home,
+                    uiState = account?.let { resident ->
+                        uiState.home.copy(
+                            residentName = resident.name,
+                            propertyName = resident.propertyName,
+                            unitLabel = resident.unitLabel,
+                        )
+                    } ?: uiState.home,
                     onReportIssue = {
                         navController.navigate(CREATE_REQUEST_ROUTE)
                     },
@@ -133,7 +141,9 @@ fun ResidentNavigation(
             }
             composable(ResidentDestination.REQUESTS.route) {
                 ResidentRequestsScreen(
-                    uiState = uiState.requests,
+                    uiState = account?.let { resident ->
+                        uiState.requests.copy(unitLabel = resident.unitLabel)
+                    } ?: uiState.requests,
                     onFilterSelected = residentViewModel::selectRequestFilter,
                     onReportIssue = {
                         navController.navigate(CREATE_REQUEST_ROUTE)
@@ -147,7 +157,15 @@ fun ResidentNavigation(
             }
             composable(ResidentDestination.PROFILE.route) {
                 ResidentProfileScreen(
-                    uiState = uiState.profile,
+                    uiState = account?.let { resident ->
+                        uiState.profile.copy(
+                            name = resident.name,
+                            propertyName = resident.propertyName,
+                            unitLabel = resident.unitLabel,
+                            phone = resident.phone,
+                            email = resident.email,
+                        )
+                    } ?: uiState.profile,
                     onSwitchRole = onSwitchRole,
                 )
             }

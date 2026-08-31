@@ -10,6 +10,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.localfix.app.data.AppContainer
 import com.localfix.app.data.auth.AuthSession
+import com.localfix.app.data.auth.AuthenticatedUser
+import com.localfix.app.data.auth.WorkspaceMembership
+import com.localfix.app.data.model.ResidentAccount
 import com.localfix.app.data.notifications.PushRole
 import com.localfix.app.ui.auth.AuthStatus
 import com.localfix.app.ui.auth.AuthViewModel
@@ -109,6 +112,7 @@ private fun DemoWorkspaceContent(
             onRequestNotificationPermission()
         },
         onSwitchRole = { activeRoleName = null },
+        session = null,
     )
 }
 
@@ -157,6 +161,7 @@ private fun AuthenticatedWorkspaceContent(
         onSwitchRole = {
             if (availableRoles.size == 1) onSignOut() else selectedRoleName = null
         },
+        session = session,
     )
 }
 
@@ -167,24 +172,67 @@ private fun WorkspaceContent(
     appContainer: AppContainer,
     onRoleSelected: (AppRole) -> Unit,
     onSwitchRole: () -> Unit,
+    session: AuthSession?,
 ) {
+    val activeMembership = activeRole?.let { role -> session?.membershipFor(role) }
+    val fallbackPropertyName = if (session == null) {
+        "Lakeview Residency"
+    } else {
+        "Property unavailable"
+    }
+    val propertyName = activeMembership?.propertyName ?: fallbackPropertyName
     when (activeRole) {
         null -> RoleSelectionScreen(
             roles = availableRoles,
             onRoleSelected = onRoleSelected,
+            propertyName = session?.memberships
+                ?.firstNotNullOfOrNull(WorkspaceMembership::propertyName)
+                ?: fallbackPropertyName,
         )
         AppRole.RESIDENT -> ResidentNavigation(
             repository = appContainer.residentRepository,
             requestDraftRepository = appContainer.requestDraftRepository,
+            account = session?.let { authenticatedSession ->
+                ResidentAccount(
+                    name = authenticatedSession.user.readableName(),
+                    propertyName = propertyName,
+                    unitLabel = activeMembership?.unitLabel ?: "Apartment unavailable",
+                    phone = "",
+                    email = authenticatedSession.user.email.orEmpty(),
+                )
+            },
             onSwitchRole = onSwitchRole,
         )
         AppRole.MANAGER -> ManagerNavigation(
             repository = appContainer.managerRepository,
+            propertyName = propertyName,
             onSwitchRole = onSwitchRole,
         )
         AppRole.WORKER -> WorkerNavigation(
             repository = appContainer.workerRepository,
+            propertyName = propertyName,
+            workerName = session?.user?.readableName(),
             onSwitchRole = onSwitchRole,
         )
     }
 }
+
+private fun AuthSession.membershipFor(role: AppRole): WorkspaceMembership? =
+    memberships.firstOrNull { membership ->
+        membership.role.equals(role.name, ignoreCase = true)
+    }
+
+private fun AuthenticatedUser.readableName(): String = displayName
+    ?.trim()
+    ?.takeIf(String::isNotEmpty)
+    ?: email
+        ?.substringBefore('@')
+        ?.replace('.', ' ')
+        ?.replace('_', ' ')
+        ?.split(' ')
+        ?.filter(String::isNotBlank)
+        ?.joinToString(" ") { part ->
+            part.replaceFirstChar { character -> character.uppercase() }
+        }
+        ?.takeIf(String::isNotEmpty)
+    ?: "LocalFix user"

@@ -20,6 +20,7 @@ import com.localfix.app.ui.manager.ManagerViewModel
 @Composable
 fun ManagerNavigation(
     repository: ManagerRepository,
+    propertyName: String? = null,
     onSwitchRole: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -43,7 +44,9 @@ fun ManagerNavigation(
     ) {
         composable(MANAGER_QUEUE_ROUTE) {
             ManagerQueueScreen(
-                uiState = uiState.queue,
+                uiState = propertyName?.let { name ->
+                    uiState.queue.copy(propertyName = name)
+                } ?: uiState.queue,
                 onTicketClick = { ticketId ->
                     managerViewModel.openTicket(ticketId)
                     navController.navigate(managerTicketRoute(ticketId))
