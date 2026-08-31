@@ -81,6 +81,21 @@ class ManagerViewModelTest {
         assertEquals("Arun Kumar", viewModel.uiState.value.queue.tickets.first().assignedWorker)
     }
 
+    @Test
+    fun managerCanCreateAResidentInviteForTheSelectedUnit() = runTest {
+        val viewModel = ManagerViewModel(SampleManagerRepository())
+        advanceUntilIdle()
+
+        viewModel.openResidentInvite()
+        viewModel.createResidentInvite()
+        advanceUntilIdle()
+
+        val invite = viewModel.uiState.value.residentInvite
+        assertEquals("Apartment A-204", invite.inviteUnitLabel)
+        assertTrue(invite.inviteCode?.startsWith("LF-") == true)
+        assertFalse(invite.canCreate)
+    }
+
     private companion object {
         const val OPEN_TICKET_ID = "90000000-0000-0000-0000-000000000001"
         const val PLUMBER_ID = "40000000-0000-0000-0000-000000000001"

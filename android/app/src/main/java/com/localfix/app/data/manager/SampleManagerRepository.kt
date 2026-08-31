@@ -17,6 +17,19 @@ class SampleManagerRepository : ManagerRepository {
 
     override suspend fun refresh() = Unit
 
+    override suspend fun createResidentInvite(
+        unitId: String,
+        validDays: Int,
+    ): ManagerResidentInvite {
+        val unit = requireNotNull(mutableData.value.units.find { it.id == unitId })
+        return ManagerResidentInvite(
+            inviteCode = "LF-7K9M-4N2P-8QRT",
+            unitId = unit.id,
+            unitLabel = unit.label,
+            expiresAt = "2026-09-07T12:00:00Z",
+        )
+    }
+
     override suspend fun assignTicket(
         ticketId: String,
         expectedVersion: Int,
@@ -100,6 +113,16 @@ fun sampleManagerData() = ManagerData(
             id = "40000000-0000-0000-0000-000000000003",
             name = "Sameer Khan",
             specialty = ServiceCategory.APPLIANCE,
+        ),
+    ),
+    units = listOf(
+        ManagerPropertyUnit(
+            id = "30000000-0000-0000-0000-000000000204",
+            label = "Apartment A-204",
+        ),
+        ManagerPropertyUnit(
+            id = "30000000-0000-0000-0000-000000000108",
+            label = "Apartment B-108",
         ),
     ),
     summary = ManagerSummary(

@@ -33,6 +33,7 @@ class ManagerQueueScreenTest {
                     ),
                     onTicketClick = {},
                     onRetry = {},
+                    onInviteResident = {},
                     onSwitchRole = {},
                 )
             }

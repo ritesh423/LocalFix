@@ -33,6 +33,12 @@ interface ManagerTicketApi {
 
     suspend fun getManagerSummary(): ManagerSummaryResponse
 
+    suspend fun listManagerUnits(): List<ManagerPropertyUnitResponse> = emptyList()
+
+    suspend fun createManagerResidentInvite(
+        request: ManagerResidentInviteCreatePayload,
+    ): ManagerResidentInviteResponse = error("Resident invites are not supported.")
+
     suspend fun assignTicket(
         ticketId: String,
         request: TicketAssignmentPayload,
@@ -109,6 +115,26 @@ data class ManagerSummaryResponse(
     val blocked: Int,
     @SerialName("awaiting_confirmation") val awaitingConfirmation: Int,
     val completed: Int,
+)
+
+@Serializable
+data class ManagerPropertyUnitResponse(
+    val id: String,
+    val label: String,
+)
+
+@Serializable
+data class ManagerResidentInviteCreatePayload(
+    @SerialName("unit_id") val unitId: String,
+    @SerialName("valid_days") val validDays: Int = 7,
+)
+
+@Serializable
+data class ManagerResidentInviteResponse(
+    @SerialName("invite_code") val inviteCode: String,
+    @SerialName("unit_id") val unitId: String,
+    @SerialName("unit_label") val unitLabel: String,
+    @SerialName("expires_at") val expiresAt: String,
 )
 
 @Serializable
@@ -233,6 +259,22 @@ class HttpTicketApi(
 
     override suspend fun getManagerSummary(): ManagerSummaryResponse {
         val responseBody = execute(method = "GET", path = "/manager/summary")
+        return json.decodeFromString(responseBody)
+    }
+
+    override suspend fun listManagerUnits(): List<ManagerPropertyUnitResponse> {
+        val responseBody = execute(method = "GET", path = "/manager/units")
+        return json.decodeFromString(responseBody)
+    }
+
+    override suspend fun createManagerResidentInvite(
+        request: ManagerResidentInviteCreatePayload,
+    ): ManagerResidentInviteResponse {
+        val responseBody = execute(
+            method = "POST",
+            path = "/manager/resident-invites",
+            requestBody = json.encodeToString(request),
+        )
         return json.decodeFromString(responseBody)
     }
 

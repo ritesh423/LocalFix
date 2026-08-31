@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.domain.device_registrations import DevicePlatform, DeviceRegistration
+from app.domain.properties import PropertyUnit
 from app.domain.ticket_workflow import TicketAction, TicketStatus, UserRole
 from app.domain.tickets import (
     AccessWindow,
@@ -172,6 +173,27 @@ class ManagerTicketSummaryResponse(BaseModel):
             awaiting_confirmation=summary.awaiting_confirmation,
             completed=summary.completed,
         )
+
+
+class ManagerPropertyUnitResponse(BaseModel):
+    id: UUID
+    label: str
+
+    @classmethod
+    def from_domain(cls, unit: PropertyUnit) -> "ManagerPropertyUnitResponse":
+        return cls(id=unit.id, label=unit.label)
+
+
+class ManagerResidentInviteCreateRequest(BaseModel):
+    unit_id: UUID
+    valid_days: int = Field(default=7, ge=1, le=30)
+
+
+class ManagerResidentInviteResponse(BaseModel):
+    invite_code: str
+    unit_id: UUID
+    unit_label: str
+    expires_at: datetime
 
 
 class TicketEventResponse(BaseModel):

@@ -16,6 +16,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.PersonAdd
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -42,6 +44,7 @@ fun ManagerQueueScreen(
     uiState: ManagerQueueUiState,
     onTicketClick: (String) -> Unit,
     onRetry: () -> Unit,
+    onInviteResident: () -> Unit,
     onSwitchRole: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -65,6 +68,27 @@ fun ManagerQueueScreen(
                 summary = uiState.summary,
                 modifier = Modifier.padding(LocalFixSpacing.medium),
             )
+        }
+        item {
+            Button(
+                onClick = onInviteResident,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        start = LocalFixSpacing.medium,
+                        end = LocalFixSpacing.medium,
+                        bottom = LocalFixSpacing.large,
+                    )
+                    .height(52.dp)
+                    .testTag("manager-invite-resident"),
+                shape = RoundedCornerShape(LocalFixRadius.medium),
+            ) {
+                Icon(Icons.Outlined.PersonAdd, contentDescription = null)
+                Text(
+                    text = "Invite a resident",
+                    modifier = Modifier.padding(start = LocalFixSpacing.small),
+                )
+            }
         }
         item {
             Text(
@@ -333,6 +357,7 @@ private fun ManagerQueuePreview() {
             ),
             onTicketClick = {},
             onRetry = {},
+            onInviteResident = {},
             onSwitchRole = {},
         )
     }

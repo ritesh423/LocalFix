@@ -51,6 +51,27 @@ class PropertyProvisioningServiceTest(unittest.TestCase):
                 unit_label="apartment a-204",
             )
 
+    def test_units_are_listed_in_readable_order(self) -> None:
+        self.service.provision(
+            property_id=self.property_id,
+            property_name="Lakeview Residency",
+            unit_id=uuid4(),
+            unit_label="Apartment B-102",
+        )
+        self.service.provision(
+            property_id=self.property_id,
+            property_name="Lakeview Residency",
+            unit_id=uuid4(),
+            unit_label="Apartment A-204",
+        )
+
+        units = self.repository.list_units(self.property_id)
+
+        self.assertEqual(
+            [unit.label for unit in units],
+            ["Apartment A-204", "Apartment B-102"],
+        )
+
     def provision_pilot(self):
         return self.service.provision(
             property_id=self.property_id,
@@ -83,9 +104,11 @@ class SqlAlchemyPropertyRepositoryTest(unittest.TestCase):
 
         property_ = self.repository.get_property(property_id)
         unit = self.repository.get_unit(property_id, unit_id)
+        units = self.repository.list_units(property_id)
 
         self.assertEqual(property_.name, "Lakeview Residency")
         self.assertEqual(unit.label, "Apartment A-204")
+        self.assertEqual([stored.id for stored in units], [unit_id])
 
 
 if __name__ == "__main__":

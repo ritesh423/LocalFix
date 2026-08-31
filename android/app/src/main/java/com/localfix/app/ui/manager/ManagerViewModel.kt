@@ -120,6 +120,58 @@ class ManagerViewModel(
         selection.value = ManagerSelection()
     }
 
+    fun openResidentInvite() {
+        selection.value = ManagerSelection(
+            selectedInviteUnitId = repository.managerData.value.units.firstOrNull()?.id,
+        )
+    }
+
+    fun selectInviteUnit(unitId: String) {
+        selection.update {
+            it.copy(
+                selectedInviteUnitId = unitId,
+                inviteCode = null,
+                inviteUnitLabel = null,
+                inviteExpiresAt = null,
+                inviteErrorMessage = null,
+            )
+        }
+    }
+
+    fun createResidentInvite() {
+        val unitId = selection.value.selectedInviteUnitId ?: return
+        if (selection.value.isCreatingInvite) return
+        selection.update {
+            it.copy(isCreatingInvite = true, inviteErrorMessage = null)
+        }
+        viewModelScope.launch {
+            runCatching { repository.createResidentInvite(unitId) }
+                .onSuccess { invite ->
+                    selection.update {
+                        it.copy(
+                            isCreatingInvite = false,
+                            inviteCode = invite.inviteCode,
+                            inviteUnitLabel = invite.unitLabel,
+                            inviteExpiresAt = invite.expiresAt,
+                        )
+                    }
+                }
+                .onFailure {
+                    selection.update {
+                        it.copy(
+                            isCreatingInvite = false,
+                            inviteErrorMessage =
+                                "Couldn't create an invite. Check your connection and try again.",
+                        )
+                    }
+                }
+        }
+    }
+
+    fun closeResidentInvite() {
+        selection.value = ManagerSelection()
+    }
+
     companion object {
         fun factory(repository: ManagerRepository): ViewModelProvider.Factory =
             viewModelFactory {
@@ -135,6 +187,12 @@ private data class ManagerSelection(
     val isAssigning: Boolean = false,
     val errorMessage: String? = null,
     val assignmentCompleted: Boolean = false,
+    val selectedInviteUnitId: String? = null,
+    val isCreatingInvite: Boolean = false,
+    val inviteCode: String? = null,
+    val inviteUnitLabel: String? = null,
+    val inviteExpiresAt: String? = null,
+    val inviteErrorMessage: String? = null,
 )
 
 private fun createManagerUiState(
@@ -174,6 +232,17 @@ private fun createManagerUiState(
             isAssigning = selection.isAssigning,
             errorMessage = selection.errorMessage,
             assignmentCompleted = selection.assignmentCompleted,
+        ),
+        residentInvite = ManagerResidentInviteUiState(
+            units = data.units.map { unit ->
+                ManagerPropertyUnitItem(id = unit.id, label = unit.label)
+            },
+            selectedUnitId = selection.selectedInviteUnitId,
+            isCreating = selection.isCreatingInvite,
+            inviteCode = selection.inviteCode,
+            inviteUnitLabel = selection.inviteUnitLabel,
+            expiresAt = selection.inviteExpiresAt,
+            errorMessage = selection.inviteErrorMessage,
         ),
     )
 }

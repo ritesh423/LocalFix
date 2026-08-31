@@ -10,7 +10,20 @@ data class ManagerData(
     val propertyName: String,
     val tickets: List<ManagerTicket>,
     val workers: List<ManagerWorker>,
+    val units: List<ManagerPropertyUnit>,
     val summary: ManagerSummary,
+)
+
+data class ManagerPropertyUnit(
+    val id: String,
+    val label: String,
+)
+
+data class ManagerResidentInvite(
+    val inviteCode: String,
+    val unitId: String,
+    val unitLabel: String,
+    val expiresAt: String,
 )
 
 data class ManagerSummary(

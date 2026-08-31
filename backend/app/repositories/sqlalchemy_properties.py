@@ -50,6 +50,15 @@ class SqlAlchemyPropertyRepository:
             )
             return self._unit_to_domain(record) if record is not None else None
 
+    def list_units(self, property_id: UUID) -> list[PropertyUnit]:
+        with self._session_factory() as session:
+            records = session.scalars(
+                select(PropertyUnitRecord)
+                .where(PropertyUnitRecord.property_id == property_id)
+                .order_by(PropertyUnitRecord.normalized_label)
+            ).all()
+            return [self._unit_to_domain(record) for record in records]
+
     def find_unit_by_label(
         self,
         property_id: UUID,

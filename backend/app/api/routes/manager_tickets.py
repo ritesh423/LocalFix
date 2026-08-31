@@ -1,9 +1,19 @@
+from datetime import timedelta
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
 
-from app.api.dependencies import ManagerContextDependency, TicketServiceDependency
+from app.api.dependencies import (
+    ManagerContextDependency,
+    MembershipRepositoryDependency,
+    PropertyRepositoryDependency,
+    ResidentInviteRepositoryDependency,
+    TicketServiceDependency,
+)
 from app.api.schemas import (
+    ManagerPropertyUnitResponse,
+    ManagerResidentInviteCreateRequest,
+    ManagerResidentInviteResponse,
     ManagerTicketSummaryResponse,
     TicketAssignmentRequest,
     TicketEventResponse,
@@ -11,6 +21,10 @@ from app.api.schemas import (
     WorkerResponse,
 )
 from app.domain.ticket_workflow import TransitionNotAllowed
+from app.services.resident_invites import (
+    InvalidResidentInviteError,
+    ResidentInviteService,
+)
 from app.services.tickets import (
     TicketNotFoundError,
     TicketVersionConflictError,
@@ -18,6 +32,53 @@ from app.services.tickets import (
 )
 
 router = APIRouter(prefix="/manager", tags=["manager"])
+
+
+@router.get("/units", response_model=list[ManagerPropertyUnitResponse])
+def list_property_units(
+    manager: ManagerContextDependency,
+    properties: PropertyRepositoryDependency,
+) -> list[ManagerPropertyUnitResponse]:
+    return [
+        ManagerPropertyUnitResponse.from_domain(unit)
+        for unit in properties.list_units(manager.property_id)
+        if unit.is_active
+    ]
+
+
+@router.post(
+    "/resident-invites",
+    response_model=ManagerResidentInviteResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_resident_invite(
+    payload: ManagerResidentInviteCreateRequest,
+    manager: ManagerContextDependency,
+    memberships: MembershipRepositoryDependency,
+    properties: PropertyRepositoryDependency,
+    invites: ResidentInviteRepositoryDependency,
+) -> ManagerResidentInviteResponse:
+    service = ResidentInviteService(invites, memberships, properties)
+    try:
+        created = service.create(
+            property_id=manager.property_id,
+            unit_id=payload.unit_id,
+            valid_for=timedelta(days=payload.valid_days),
+        )
+    except InvalidResidentInviteError as error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "invalid_unit", "message": str(error)},
+        ) from error
+    unit = properties.get_unit(manager.property_id, created.invite.unit_id)
+    if unit is None:
+        raise RuntimeError("Created invite unit could not be loaded.")
+    return ManagerResidentInviteResponse(
+        invite_code=created.code,
+        unit_id=unit.id,
+        unit_label=unit.label,
+        expires_at=created.invite.expires_at,
+    )
 
 
 @router.get("/summary", response_model=ManagerTicketSummaryResponse)

@@ -13,6 +13,8 @@ class PropertyRepository(Protocol):
 
     def get_unit(self, property_id: UUID, unit_id: UUID) -> PropertyUnit | None: ...
 
+    def list_units(self, property_id: UUID) -> list[PropertyUnit]: ...
+
     def find_unit_by_label(
         self,
         property_id: UUID,
@@ -39,6 +41,16 @@ class InMemoryPropertyRepository:
     def get_unit(self, property_id: UUID, unit_id: UUID) -> PropertyUnit | None:
         unit = self._units.get(unit_id)
         return unit if unit is not None and unit.property_id == property_id else None
+
+    def list_units(self, property_id: UUID) -> list[PropertyUnit]:
+        return sorted(
+            [
+                unit
+                for unit in self._units.values()
+                if unit.property_id == property_id
+            ],
+            key=lambda unit: unit.normalized_label,
+        )
 
     def find_unit_by_label(
         self,

@@ -14,6 +14,7 @@ import androidx.navigation.navArgument
 import com.localfix.app.data.manager.ManagerRepository
 import com.localfix.app.ui.manager.ManagerAssignmentScreen
 import com.localfix.app.ui.manager.ManagerQueueScreen
+import com.localfix.app.ui.manager.ManagerResidentInviteScreen
 import com.localfix.app.ui.manager.ManagerViewModel
 
 @Composable
@@ -48,7 +49,22 @@ fun ManagerNavigation(
                     navController.navigate(managerTicketRoute(ticketId))
                 },
                 onRetry = managerViewModel::refresh,
+                onInviteResident = {
+                    managerViewModel.openResidentInvite()
+                    navController.navigate(MANAGER_RESIDENT_INVITE_ROUTE)
+                },
                 onSwitchRole = onSwitchRole,
+            )
+        }
+        composable(MANAGER_RESIDENT_INVITE_ROUTE) {
+            ManagerResidentInviteScreen(
+                uiState = uiState.residentInvite,
+                onUnitSelected = managerViewModel::selectInviteUnit,
+                onCreateInvite = managerViewModel::createResidentInvite,
+                onBack = {
+                    managerViewModel.closeResidentInvite()
+                    navController.popBackStack()
+                },
             )
         }
         composable(
@@ -75,6 +91,7 @@ fun ManagerNavigation(
 }
 
 private const val MANAGER_QUEUE_ROUTE = "manager/queue"
+private const val MANAGER_RESIDENT_INVITE_ROUTE = "manager/resident-invite"
 private const val MANAGER_TICKET_ID_ARGUMENT = "ticketId"
 private const val MANAGER_TICKET_ROUTE = "manager/tickets/{$MANAGER_TICKET_ID_ARGUMENT}"
 

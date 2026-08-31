@@ -11,6 +11,9 @@ import com.localfix.app.data.model.TicketStatus
 import com.localfix.app.data.model.UrgencySuggestion
 import com.localfix.app.data.remote.ManagerTicketApi
 import com.localfix.app.data.remote.ManagerSummaryResponse
+import com.localfix.app.data.remote.ManagerPropertyUnitResponse
+import com.localfix.app.data.remote.ManagerResidentInviteCreatePayload
+import com.localfix.app.data.remote.ManagerResidentInviteResponse
 import com.localfix.app.data.remote.TicketResponse
 import com.localfix.app.data.remote.WorkerResponse
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -51,17 +54,19 @@ class ApiManagerRepository(
             ManagerSyncState.InitialLoading
         }
         runCatching {
-            Triple(
-                ticketApi.listManagerTickets(),
-                ticketApi.listManagerWorkers(),
-                ticketApi.getManagerSummary(),
+            ManagerRefreshResponse(
+                tickets = ticketApi.listManagerTickets(),
+                workers = ticketApi.listManagerWorkers(),
+                summary = ticketApi.getManagerSummary(),
+                units = ticketApi.listManagerUnits(),
             )
-        }.onSuccess { (tickets, workers, summary) ->
+        }.onSuccess { response ->
             serverData.update { data ->
                 data.copy(
-                    tickets = tickets.map { it.toManagerTicket(clock) },
-                    workers = workers.map(WorkerResponse::toManagerWorker),
-                    summary = summary.toManagerSummary(),
+                    tickets = response.tickets.map { it.toManagerTicket(clock) },
+                    workers = response.workers.map(WorkerResponse::toManagerWorker),
+                    summary = response.summary.toManagerSummary(),
+                    units = response.units.map(ManagerPropertyUnitResponse::toDomain),
                 )
             }
             hasLoaded = true
@@ -73,6 +78,13 @@ class ApiManagerRepository(
             )
         }
     }
+
+    override suspend fun createResidentInvite(
+        unitId: String,
+        validDays: Int,
+    ): ManagerResidentInvite = ticketApi.createManagerResidentInvite(
+        ManagerResidentInviteCreatePayload(unitId, validDays),
+    ).toDomain()
 
     override suspend fun assignTicket(
         ticketId: String,
@@ -145,10 +157,18 @@ class ApiManagerRepository(
             propertyName = "Lakeview Residency",
             tickets = emptyList(),
             workers = emptyList(),
+            units = emptyList(),
             summary = ManagerSummary.Empty,
         )
     }
 }
+
+private data class ManagerRefreshResponse(
+    val tickets: List<TicketResponse>,
+    val workers: List<WorkerResponse>,
+    val summary: ManagerSummaryResponse,
+    val units: List<ManagerPropertyUnitResponse>,
+)
 
 private fun ManagerData.withPendingAssignments(
     commands: List<PendingTicketCommandEntity>,
@@ -191,6 +211,18 @@ private fun WorkerResponse.toManagerWorker(): ManagerWorker = ManagerWorker(
     id = id,
     name = name,
     specialty = ServiceCategory.valueOf(specialty.uppercase()),
+)
+
+private fun ManagerPropertyUnitResponse.toDomain() = ManagerPropertyUnit(
+    id = id,
+    label = label,
+)
+
+private fun ManagerResidentInviteResponse.toDomain() = ManagerResidentInvite(
+    inviteCode = inviteCode,
+    unitId = unitId,
+    unitLabel = unitLabel,
+    expiresAt = expiresAt,
 )
 
 private fun ManagerSummaryResponse.toManagerSummary() = ManagerSummary(

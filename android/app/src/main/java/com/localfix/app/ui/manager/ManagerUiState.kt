@@ -8,6 +8,7 @@ import com.localfix.app.ui.requests.RequestStatusTone
 data class ManagerUiState(
     val queue: ManagerQueueUiState,
     val assignment: ManagerAssignmentUiState,
+    val residentInvite: ManagerResidentInviteUiState,
 )
 
 data class ManagerQueueUiState(
@@ -77,4 +78,22 @@ data class ManagerWorkerItem(
     val specialty: ServiceCategory,
     val specialtyLabel: String,
     val isRecommended: Boolean,
+)
+
+data class ManagerResidentInviteUiState(
+    val units: List<ManagerPropertyUnitItem> = emptyList(),
+    val selectedUnitId: String? = null,
+    val isCreating: Boolean = false,
+    val inviteCode: String? = null,
+    val inviteUnitLabel: String? = null,
+    val expiresAt: String? = null,
+    val errorMessage: String? = null,
+) {
+    val canCreate: Boolean
+        get() = selectedUnitId != null && !isCreating && inviteCode == null
+}
+
+data class ManagerPropertyUnitItem(
+    val id: String,
+    val label: String,
 )

@@ -8,6 +8,11 @@ interface ManagerRepository {
 
     suspend fun refresh()
 
+    suspend fun createResidentInvite(
+        unitId: String,
+        validDays: Int = 7,
+    ): ManagerResidentInvite
+
     suspend fun assignTicket(
         ticketId: String,
         expectedVersion: Int,
