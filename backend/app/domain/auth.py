@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 from uuid import UUID
 
 from app.domain.ticket_workflow import UserRole
@@ -10,6 +11,20 @@ class AuthenticatedIdentity:
     firebase_uid: str
     email: str | None = None
     display_name: str | None = None
+    email_verified: bool = False
+
+
+@dataclass(frozen=True)
+class ResidentInvite:
+    id: UUID
+    property_id: UUID
+    unit_id: UUID
+    code_digest: str
+    expires_at: datetime
+    created_at: datetime
+    claimed_by_firebase_uid: str | None = None
+    claimed_at: datetime | None = None
+    revoked_at: datetime | None = None
 
 
 @dataclass(frozen=True)

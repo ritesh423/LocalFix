@@ -17,6 +17,7 @@ from app.gateways.identity import IdentityTokenVerifier, InvalidIdentityTokenErr
 from app.repositories.device_registrations import DeviceRegistrationRepository
 from app.repositories.memberships import MembershipRepository
 from app.repositories.properties import PropertyRepository
+from app.repositories.resident_invites import ResidentInviteRepository
 from app.repositories.tickets import TicketRepository
 from app.services.device_registrations import DeviceRegistrationService
 from app.services.tickets import TicketService
@@ -109,6 +110,10 @@ def get_membership_repository(request: Request) -> MembershipRepository:
 
 def get_property_repository(request: Request) -> PropertyRepository:
     return request.app.state.property_repository
+
+
+def get_resident_invite_repository(request: Request) -> ResidentInviteRepository:
+    return request.app.state.resident_invite_repository
 
 
 def get_authenticated_identity(
@@ -272,4 +277,8 @@ MembershipRepositoryDependency = Annotated[
 PropertyRepositoryDependency = Annotated[
     PropertyRepository,
     Depends(get_property_repository),
+]
+ResidentInviteRepositoryDependency = Annotated[
+    ResidentInviteRepository,
+    Depends(get_resident_invite_repository),
 ]

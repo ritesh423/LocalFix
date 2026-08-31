@@ -72,10 +72,32 @@ class AuthViewModelTest {
         assertEquals(AuthStatus.NO_WORKSPACE, viewModel.uiState.value.status)
     }
 
+    @Test
+    fun newResidentAccountWaitsForEmailVerification() = runTest {
+        val authRepository = FakeAuthRepository()
+        val viewModel = AuthViewModel(
+            authRepository = authRepository,
+            authSessionApi = FakeAuthSessionApi(residentSession()),
+        )
+        viewModel.showCreateAccount()
+        viewModel.updateEmail("new-resident@example.com")
+        viewModel.updatePassword("safe-password")
+        viewModel.updateConfirmPassword("safe-password")
+        viewModel.updateInviteCode("LF-2345-6789-ABCD")
+
+        viewModel.createAccount()
+        advanceUntilIdle()
+
+        assertEquals(AuthStatus.VERIFY_EMAIL, viewModel.uiState.value.status)
+        assertEquals(1, authRepository.createAccountCount)
+        assertEquals("", viewModel.uiState.value.password)
+    }
+
     private class FakeAuthRepository : AuthRepository {
         override var currentUser: AuthenticatedUser? = null
         var lastEmail: String? = null
         var signInCount = 0
+        var createAccountCount = 0
 
         override suspend fun signIn(email: String, password: String) {
             signInCount += 1
@@ -84,8 +106,21 @@ class AuthViewModelTest {
                 firebaseUid = "firebase-resident-123",
                 email = email,
                 displayName = "Ritesh",
+                emailVerified = true,
             )
         }
+
+        override suspend fun createAccount(email: String, password: String) {
+            createAccountCount += 1
+            currentUser = AuthenticatedUser(
+                firebaseUid = "new-firebase-resident",
+                email = email,
+                displayName = null,
+                emailVerified = false,
+            )
+        }
+
+        override suspend fun refreshCurrentUser(): AuthenticatedUser? = currentUser
 
         override fun signOut() {
             currentUser = null
@@ -98,6 +133,10 @@ class AuthViewModelTest {
         private val session: AuthSession,
     ) : AuthSessionApi {
         override suspend fun getAuthSession(): AuthSession = session
+
+        override suspend fun redeemResidentInvite(
+            inviteCode: String,
+        ): WorkspaceMembership = session.memberships.first()
     }
 
     private fun residentSession() = AuthSession(
@@ -105,13 +144,16 @@ class AuthViewModelTest {
             firebaseUid = "firebase-resident-123",
             email = "resident@example.com",
             displayName = "Ritesh",
+            emailVerified = true,
         ),
         memberships = listOf(
             WorkspaceMembership(
                 propertyId = "20000000-0000-0000-0000-000000000001",
+                propertyName = "Lakeview Residency",
                 userId = "10000000-0000-0000-0000-000000000101",
                 role = "resident",
                 unitId = "30000000-0000-0000-0000-000000000204",
+                unitLabel = "Apartment A-204",
             ),
         ),
     )

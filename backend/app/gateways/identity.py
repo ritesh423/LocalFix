@@ -37,6 +37,7 @@ class FirebaseIdentityTokenVerifier:
                 firebase_uid=firebase_uid,
                 email=self._optional_text(decoded.get("email")),
                 display_name=self._optional_text(decoded.get("name")),
+                email_verified=decoded.get("email_verified") is True,
             )
         except (FirebaseError, KeyError, TypeError, ValueError) as error:
             raise InvalidIdentityTokenError("Firebase ID token is not valid.") from error
@@ -64,4 +65,5 @@ class FirebaseIdentityDirectory:
             firebase_uid=user.uid,
             email=user.email,
             display_name=user.display_name,
+            email_verified=getattr(user, "email_verified", False),
         )

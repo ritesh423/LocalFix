@@ -8,6 +8,7 @@ class AuthenticatedUserResponse(BaseModel):
     firebase_uid: str
     email: str | None
     display_name: str | None
+    email_verified: bool
 
     @classmethod
     def from_domain(
@@ -18,6 +19,7 @@ class AuthenticatedUserResponse(BaseModel):
             firebase_uid=identity.firebase_uid,
             email=identity.email,
             display_name=identity.display_name,
+            email_verified=identity.email_verified,
         )
 
 
@@ -49,3 +51,11 @@ class MembershipResponse(BaseModel):
 class AuthSessionResponse(BaseModel):
     user: AuthenticatedUserResponse
     memberships: list[MembershipResponse]
+
+
+class ResidentInviteRedemptionRequest(BaseModel):
+    invite_code: str
+
+
+class ResidentInviteRedemptionResponse(BaseModel):
+    membership: MembershipResponse

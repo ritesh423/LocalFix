@@ -14,7 +14,9 @@ import com.localfix.app.data.notifications.PushRole
 import com.localfix.app.ui.auth.AuthStatus
 import com.localfix.app.ui.auth.AuthViewModel
 import com.localfix.app.ui.auth.CheckingSessionScreen
+import com.localfix.app.ui.auth.JoinWorkspaceScreen
 import com.localfix.app.ui.auth.SignInScreen
+import com.localfix.app.ui.auth.VerifyEmailScreen
 import com.localfix.app.ui.auth.WorkspaceAccessScreen
 import com.localfix.app.ui.navigation.ManagerNavigation
 import com.localfix.app.ui.navigation.ResidentNavigation
@@ -45,15 +47,33 @@ fun LocalFixApp(
                 AuthStatus.CHECKING_SESSION -> CheckingSessionScreen()
                 AuthStatus.SIGNED_OUT,
                 AuthStatus.SIGNING_IN,
+                AuthStatus.SIGNING_UP,
                 -> SignInScreen(
                     uiState = authUiState,
                     onEmailChange = authViewModel::updateEmail,
                     onPasswordChange = authViewModel::updatePassword,
+                    onConfirmPasswordChange = authViewModel::updateConfirmPassword,
+                    onInviteCodeChange = authViewModel::updateInviteCode,
                     onSignIn = authViewModel::signIn,
+                    onCreateAccount = authViewModel::createAccount,
+                    onShowSignIn = authViewModel::showSignIn,
+                    onShowCreateAccount = authViewModel::showCreateAccount,
                 )
-                AuthStatus.NO_WORKSPACE -> WorkspaceAccessScreen(
-                    message = "Ask your apartment manager to link this account to a property.",
-                    onRetry = authViewModel::refreshSession,
+                AuthStatus.VERIFY_EMAIL -> VerifyEmailScreen(
+                    email = authUiState.email,
+                    message = authUiState.message,
+                    onCheckVerification = authViewModel::confirmEmailVerified,
+                    onSignOut = authViewModel::signOut,
+                )
+                AuthStatus.NO_WORKSPACE,
+                AuthStatus.JOINING_WORKSPACE,
+                -> JoinWorkspaceScreen(
+                    inviteCode = authUiState.inviteCode,
+                    inviteCodeError = authUiState.inviteCodeError,
+                    message = authUiState.message,
+                    isJoining = authUiState.status == AuthStatus.JOINING_WORKSPACE,
+                    onInviteCodeChange = authViewModel::updateInviteCode,
+                    onJoin = authViewModel::joinWorkspace,
                     onSignOut = authViewModel::signOut,
                 )
                 AuthStatus.SESSION_ERROR -> WorkspaceAccessScreen(

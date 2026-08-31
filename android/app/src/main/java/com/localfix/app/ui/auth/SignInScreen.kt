@@ -26,6 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -48,11 +50,20 @@ fun SignInScreen(
     uiState: AuthUiState,
     onEmailChange: (String) -> Unit,
     onPasswordChange: (String) -> Unit,
+    onConfirmPasswordChange: (String) -> Unit,
+    onInviteCodeChange: (String) -> Unit,
     onSignIn: () -> Unit,
+    onCreateAccount: () -> Unit,
+    onShowSignIn: () -> Unit,
+    onShowCreateAccount: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var passwordVisible by remember { mutableStateOf(false) }
-    val isSigningIn = uiState.status == AuthStatus.SIGNING_IN
+    val isCreateAccount = uiState.mode == AuthMode.CREATE_ACCOUNT
+    val isBusy = uiState.status in setOf(
+        AuthStatus.SIGNING_IN,
+        AuthStatus.SIGNING_UP,
+    )
 
     Column(
         modifier = modifier
@@ -60,19 +71,23 @@ fun SignInScreen(
             .background(MaterialTheme.colorScheme.background)
             .imePadding(),
     ) {
-        SignInHeader()
+        SignInHeader(isCreateAccount = isCreateAccount)
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(LocalFixSpacing.large),
         ) {
             Text(
-                text = "Welcome back",
+                text = if (isCreateAccount) "Create your account" else "Welcome back",
                 style = MaterialTheme.typography.headlineSmall,
             )
             Spacer(modifier = Modifier.height(LocalFixSpacing.small))
             Text(
-                text = "Use the account linked to your apartment workspace.",
+                text = if (isCreateAccount) {
+                    "Use the invite given to you by your apartment manager."
+                } else {
+                    "Use the account linked to your apartment workspace."
+                },
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyLarge,
             )
@@ -83,7 +98,7 @@ fun SignInScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("sign-in-email"),
-                enabled = !isSigningIn,
+                enabled = !isBusy,
                 label = { Text("Email") },
                 singleLine = true,
                 isError = uiState.emailError != null,
@@ -102,7 +117,7 @@ fun SignInScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("sign-in-password"),
-                enabled = !isSigningIn,
+                enabled = !isBusy,
                 label = { Text("Password") },
                 singleLine = true,
                 isError = uiState.passwordError != null,
@@ -132,10 +147,55 @@ fun SignInScreen(
                 },
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Password,
-                    imeAction = ImeAction.Done,
+                    imeAction = if (isCreateAccount) ImeAction.Next else ImeAction.Done,
                 ),
-                keyboardActions = KeyboardActions(onDone = { onSignIn() }),
+                keyboardActions = KeyboardActions(
+                    onDone = { if (!isCreateAccount) onSignIn() },
+                ),
             )
+            if (isCreateAccount) {
+                Spacer(modifier = Modifier.height(LocalFixSpacing.medium))
+                OutlinedTextField(
+                    value = uiState.confirmPassword,
+                    onValueChange = onConfirmPasswordChange,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("sign-up-confirm-password"),
+                    enabled = !isBusy,
+                    label = { Text("Confirm password") },
+                    singleLine = true,
+                    isError = uiState.confirmPasswordError != null,
+                    supportingText = uiState.confirmPasswordError?.let { message ->
+                        { Text(message) }
+                    },
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Password,
+                        imeAction = ImeAction.Next,
+                    ),
+                )
+                Spacer(modifier = Modifier.height(LocalFixSpacing.medium))
+                OutlinedTextField(
+                    value = uiState.inviteCode,
+                    onValueChange = onInviteCodeChange,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("sign-up-invite-code"),
+                    enabled = !isBusy,
+                    label = { Text("Apartment invite code") },
+                    placeholder = { Text("LF-XXXX-XXXX-XXXX") },
+                    singleLine = true,
+                    isError = uiState.inviteCodeError != null,
+                    supportingText = uiState.inviteCodeError?.let { message ->
+                        { Text(message) }
+                    },
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Characters,
+                        imeAction = ImeAction.Done,
+                    ),
+                    keyboardActions = KeyboardActions(onDone = { onCreateAccount() }),
+                )
+            }
             uiState.message?.let { message ->
                 Spacer(modifier = Modifier.height(LocalFixSpacing.medium))
                 Surface(
@@ -152,39 +212,49 @@ fun SignInScreen(
             }
             Spacer(modifier = Modifier.height(LocalFixSpacing.large))
             Button(
-                onClick = onSignIn,
+                onClick = if (isCreateAccount) onCreateAccount else onSignIn,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp)
                     .testTag("sign-in-submit"),
-                enabled = !isSigningIn,
+                enabled = !isBusy,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                 ),
                 shape = RoundedCornerShape(LocalFixRadius.medium),
             ) {
-                if (isSigningIn) {
+                if (isBusy) {
                     CircularProgressIndicator(
                         color = MaterialTheme.colorScheme.onPrimary,
                         strokeWidth = 2.dp,
                     )
                 } else {
-                    Text("Sign in", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (isCreateAccount) "Create account" else "Sign in",
+                        fontWeight = FontWeight.SemiBold,
+                    )
                 }
             }
             Spacer(modifier = Modifier.height(LocalFixSpacing.medium))
-            Text(
-                text = "Accounts are provided by your apartment manager.",
+            TextButton(
+                onClick = if (isCreateAccount) onShowSignIn else onShowCreateAccount,
                 modifier = Modifier.align(Alignment.CenterHorizontally),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodySmall,
-            )
+                enabled = !isBusy,
+            ) {
+                Text(
+                    if (isCreateAccount) {
+                        "Already have an account? Sign in"
+                    } else {
+                        "New resident? Create an account"
+                    }
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun SignInHeader() {
+private fun SignInHeader(isCreateAccount: Boolean) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -222,16 +292,155 @@ private fun SignInHeader() {
         }
         Spacer(modifier = Modifier.height(LocalFixSpacing.extraLarge))
         Text(
-            text = "Your building, one sign-in.",
+            text = if (isCreateAccount) {
+                "Join the right apartment."
+            } else {
+                "Your building, one sign-in."
+            },
             color = MaterialTheme.colorScheme.onPrimary,
             style = MaterialTheme.typography.headlineMedium,
         )
         Spacer(modifier = Modifier.height(LocalFixSpacing.small))
         Text(
-            text = "Open the right workspace without choosing a role you don't have.",
+            text = if (isCreateAccount) {
+                "Your invite securely connects you to your home."
+            } else {
+                "Open the right workspace without choosing a role you don't have."
+            },
             color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.74f),
             style = MaterialTheme.typography.bodyLarge,
         )
+    }
+}
+
+@Composable
+fun VerifyEmailScreen(
+    email: String,
+    message: String?,
+    onCheckVerification: () -> Unit,
+    onSignOut: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    OnboardingActionScreen(
+        title = "Verify your email",
+        description = "We sent a verification link to $email. Open it, then return here.",
+        message = message,
+        primaryLabel = "I've verified my email",
+        onPrimary = onCheckVerification,
+        onSignOut = onSignOut,
+        modifier = modifier,
+    )
+}
+
+@Composable
+fun JoinWorkspaceScreen(
+    inviteCode: String,
+    inviteCodeError: String?,
+    message: String?,
+    isJoining: Boolean,
+    onInviteCodeChange: (String) -> Unit,
+    onJoin: () -> Unit,
+    onSignOut: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .imePadding()
+            .padding(LocalFixSpacing.large),
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text("Join your apartment", style = MaterialTheme.typography.headlineSmall)
+        Spacer(modifier = Modifier.height(LocalFixSpacing.small))
+        Text(
+            "Enter the invite code provided by your apartment manager.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyLarge,
+        )
+        Spacer(modifier = Modifier.height(LocalFixSpacing.large))
+        OutlinedTextField(
+            value = inviteCode,
+            onValueChange = onInviteCodeChange,
+            modifier = Modifier.fillMaxWidth().testTag("join-invite-code"),
+            enabled = !isJoining,
+            label = { Text("Apartment invite code") },
+            placeholder = { Text("LF-XXXX-XXXX-XXXX") },
+            isError = inviteCodeError != null,
+            supportingText = inviteCodeError?.let { error -> { Text(error) } },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(
+                capitalization = KeyboardCapitalization.Characters,
+                imeAction = ImeAction.Done,
+            ),
+            keyboardActions = KeyboardActions(onDone = { onJoin() }),
+        )
+        message?.let {
+            Spacer(modifier = Modifier.height(LocalFixSpacing.medium))
+            Text(it, color = MaterialTheme.colorScheme.error)
+        }
+        Spacer(modifier = Modifier.height(LocalFixSpacing.large))
+        Button(
+            onClick = onJoin,
+            modifier = Modifier.fillMaxWidth().height(56.dp),
+            enabled = !isJoining,
+        ) {
+            if (isJoining) {
+                CircularProgressIndicator(
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    strokeWidth = 2.dp,
+                )
+            } else {
+                Text("Join apartment")
+            }
+        }
+        TextButton(
+            onClick = onSignOut,
+            modifier = Modifier.align(Alignment.CenterHorizontally),
+            enabled = !isJoining,
+        ) {
+            Text("Use another account")
+        }
+    }
+}
+
+@Composable
+private fun OnboardingActionScreen(
+    title: String,
+    description: String,
+    message: String?,
+    primaryLabel: String,
+    onPrimary: () -> Unit,
+    onSignOut: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(LocalFixSpacing.large),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(title, style = MaterialTheme.typography.headlineSmall)
+        Spacer(modifier = Modifier.height(LocalFixSpacing.small))
+        Text(
+            description,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyLarge,
+        )
+        message?.let {
+            Spacer(modifier = Modifier.height(LocalFixSpacing.medium))
+            Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Spacer(modifier = Modifier.height(LocalFixSpacing.large))
+        Button(onClick = onPrimary, modifier = Modifier.fillMaxWidth()) {
+            Text(primaryLabel)
+        }
+        Spacer(modifier = Modifier.height(LocalFixSpacing.small))
+        TextButton(onClick = onSignOut) {
+            Text("Use another account")
+        }
     }
 }
 

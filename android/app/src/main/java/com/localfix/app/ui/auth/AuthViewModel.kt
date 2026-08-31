@@ -39,19 +39,39 @@ class AuthViewModel(
         }
     }
 
+    fun updateConfirmPassword(password: String) {
+        mutableUiState.update {
+            it.copy(
+                confirmPassword = password,
+                confirmPasswordError = null,
+                message = null,
+            )
+        }
+    }
+
+    fun updateInviteCode(inviteCode: String) {
+        mutableUiState.update {
+            it.copy(
+                inviteCode = inviteCode.uppercase(),
+                inviteCodeError = null,
+                message = null,
+            )
+        }
+    }
+
+    fun showSignIn() {
+        changeMode(AuthMode.SIGN_IN)
+    }
+
+    fun showCreateAccount() {
+        changeMode(AuthMode.CREATE_ACCOUNT)
+    }
+
     fun signIn() {
         val current = mutableUiState.value
         val email = current.email.trim()
-        val emailError = if (!email.contains('@') || email.endsWith('@')) {
-            "Enter a valid email address"
-        } else {
-            null
-        }
-        val passwordError = if (current.password.isBlank()) {
-            "Enter your password"
-        } else {
-            null
-        }
+        val emailError = validateEmail(email)
+        val passwordError = validateSignInPassword(current.password)
         if (emailError != null || passwordError != null) {
             mutableUiState.update {
                 it.copy(emailError = emailError, passwordError = passwordError)
@@ -83,6 +103,125 @@ class AuthViewModel(
         }
     }
 
+    fun createAccount() {
+        val current = mutableUiState.value
+        val email = current.email.trim()
+        val emailError = validateEmail(email)
+        val passwordError = if (current.password.length < 6) {
+            "Use at least 6 characters"
+        } else {
+            null
+        }
+        val confirmPasswordError = if (current.confirmPassword != current.password) {
+            "Passwords do not match"
+        } else {
+            null
+        }
+        val inviteCodeError = validateInviteCode(current.inviteCode)
+        if (
+            emailError != null ||
+            passwordError != null ||
+            confirmPasswordError != null ||
+            inviteCodeError != null
+        ) {
+            mutableUiState.update {
+                it.copy(
+                    emailError = emailError,
+                    passwordError = passwordError,
+                    confirmPasswordError = confirmPasswordError,
+                    inviteCodeError = inviteCodeError,
+                )
+            }
+            return
+        }
+
+        mutableUiState.update {
+            it.copy(
+                status = AuthStatus.SIGNING_UP,
+                email = email,
+                emailError = null,
+                passwordError = null,
+                confirmPasswordError = null,
+                inviteCodeError = null,
+                message = null,
+            )
+        }
+        viewModelScope.launch {
+            runCatching { authRepository.createAccount(email, current.password) }
+                .onSuccess {
+                    mutableUiState.update {
+                        it.copy(
+                            status = AuthStatus.VERIFY_EMAIL,
+                            password = "",
+                            confirmPassword = "",
+                            message = "We sent a verification link to $email.",
+                        )
+                    }
+                }
+                .onFailure {
+                    mutableUiState.update {
+                        it.copy(
+                            status = AuthStatus.SIGNED_OUT,
+                            password = "",
+                            confirmPassword = "",
+                            message = "We couldn't create that account. The email may already be in use.",
+                        )
+                    }
+                }
+        }
+    }
+
+    fun confirmEmailVerified() {
+        mutableUiState.update {
+            it.copy(status = AuthStatus.CHECKING_SESSION, message = null)
+        }
+        viewModelScope.launch {
+            runCatching { authRepository.refreshCurrentUser() }
+                .onSuccess { user ->
+                    if (user?.emailVerified == true) {
+                        if (mutableUiState.value.inviteCode.isBlank()) {
+                            mutableUiState.update {
+                                it.copy(status = AuthStatus.NO_WORKSPACE)
+                            }
+                        } else {
+                            redeemInvite()
+                        }
+                    } else {
+                        mutableUiState.update {
+                            it.copy(
+                                status = AuthStatus.VERIFY_EMAIL,
+                                message = "That email is not verified yet. Open the link, then try again.",
+                            )
+                        }
+                    }
+                }
+                .onFailure {
+                    mutableUiState.update {
+                        it.copy(
+                            status = AuthStatus.VERIFY_EMAIL,
+                            message = "We couldn't check your email verification. Try again.",
+                        )
+                    }
+                }
+        }
+    }
+
+    fun joinWorkspace() {
+        val inviteCodeError = validateInviteCode(mutableUiState.value.inviteCode)
+        if (inviteCodeError != null) {
+            mutableUiState.update { it.copy(inviteCodeError = inviteCodeError) }
+            return
+        }
+        mutableUiState.update {
+            it.copy(
+                status = AuthStatus.JOINING_WORKSPACE,
+                inviteCodeError = null,
+                message = null,
+            )
+        }
+        viewModelScope.launch { redeemInvite() }
+    }
+
     fun refreshSession() {
         mutableUiState.update {
             it.copy(status = AuthStatus.CHECKING_SESSION, message = null)
@@ -103,10 +242,12 @@ class AuthViewModel(
             .onSuccess { session ->
                 mutableUiState.update {
                     it.copy(
-                        status = if (session.memberships.isEmpty()) {
-                            AuthStatus.NO_WORKSPACE
-                        } else {
-                            AuthStatus.AUTHENTICATED
+                        status = when {
+                            session.memberships.isNotEmpty() -> AuthStatus.AUTHENTICATED
+                            authRepository.currentUser?.emailVerified == false -> {
+                                AuthStatus.VERIFY_EMAIL
+                            }
+                            else -> AuthStatus.NO_WORKSPACE
                         },
                         password = "",
                         session = session,
@@ -124,6 +265,52 @@ class AuthViewModel(
                 }
             }
     }
+
+    private suspend fun redeemInvite() {
+        val inviteCode = mutableUiState.value.inviteCode.trim()
+        runCatching { authSessionApi.redeemResidentInvite(inviteCode) }
+            .onSuccess { loadWorkspaceSession() }
+            .onFailure {
+                mutableUiState.update {
+                    it.copy(
+                        status = AuthStatus.NO_WORKSPACE,
+                        message = "That invite could not be used. Check the code or ask your manager for a new one.",
+                    )
+                }
+            }
+    }
+
+    private fun changeMode(mode: AuthMode) {
+        mutableUiState.update {
+            it.copy(
+                mode = mode,
+                password = "",
+                confirmPassword = "",
+                emailError = null,
+                passwordError = null,
+                confirmPasswordError = null,
+                inviteCodeError = null,
+                message = null,
+            )
+        }
+    }
+
+    private fun validateEmail(email: String): String? =
+        if (!email.contains('@') || email.endsWith('@')) {
+            "Enter a valid email address"
+        } else {
+            null
+        }
+
+    private fun validateSignInPassword(password: String): String? =
+        if (password.isBlank()) "Enter your password" else null
+
+    private fun validateInviteCode(inviteCode: String): String? =
+        if (inviteCode.count(Char::isLetterOrDigit) < 8) {
+            "Enter the invite code from your apartment manager"
+        } else {
+            null
+        }
 
     companion object {
         fun factory(

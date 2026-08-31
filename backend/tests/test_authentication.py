@@ -16,10 +16,12 @@ from app.gateways.identity import (
 from app.main import create_app
 from app.repositories.memberships import InMemoryMembershipRepository
 from app.repositories.properties import InMemoryPropertyRepository
+from app.repositories.resident_invites import InMemoryResidentInviteRepository
 from app.repositories.sqlalchemy_memberships import (
     SqlAlchemyMembershipRepository,
 )
 from app.repositories.tickets import InMemoryTicketRepository
+from app.services.resident_invites import ResidentInviteService
 
 
 class FakeIdentityTokenVerifier:
@@ -30,6 +32,7 @@ class FakeIdentityTokenVerifier:
             firebase_uid="firebase-resident-123",
             email="resident@example.com",
             display_name="Ritesh",
+            email_verified=True,
         )
 
 
@@ -61,11 +64,13 @@ class AuthenticationApiTest(unittest.TestCase):
                 normalized_label="apartment a-204",
             )
         )
+        self.invites = InMemoryResidentInviteRepository()
         self.client = TestClient(
             create_app(
                 self.ticket_repository,
                 membership_repository=self.memberships,
                 property_repository=self.properties,
+                resident_invite_repository=self.invites,
                 identity_token_verifier=FakeIdentityTokenVerifier(),
                 authentication_required=True,
             )
@@ -113,6 +118,40 @@ class AuthenticationApiTest(unittest.TestCase):
             "Apartment A-204",
         )
         self.assertNotIn("manager", {item["role"] for item in session["memberships"]})
+
+    def test_verified_firebase_user_can_join_with_resident_invite(self) -> None:
+        second_memberships = InMemoryMembershipRepository()
+        client = TestClient(
+            create_app(
+                InMemoryTicketRepository(),
+                membership_repository=second_memberships,
+                property_repository=self.properties,
+                resident_invite_repository=self.invites,
+                identity_token_verifier=FakeIdentityTokenVerifier(),
+                authentication_required=True,
+            )
+        )
+        invite = ResidentInviteService(
+            self.invites,
+            second_memberships,
+            self.properties,
+        ).create(
+            self.resident_membership.property_id,
+            self.resident_membership.unit_id,
+        )
+
+        response = client.post(
+            "/auth/resident-invites/redeem",
+            headers=self.authorization_header(),
+            json={"invite_code": invite.code},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["membership"]["role"], "resident")
+        self.assertEqual(
+            response.json()["membership"]["unit_label"],
+            "Apartment A-204",
+        )
 
     def test_authenticated_resident_identity_owns_the_created_ticket(self) -> None:
         response = self.client.post(

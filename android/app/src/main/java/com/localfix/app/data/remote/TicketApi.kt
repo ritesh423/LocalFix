@@ -174,6 +174,21 @@ class HttpTicketApi(
         return json.decodeFromString<AuthSessionResponse>(responseBody).toDomain()
     }
 
+    override suspend fun redeemResidentInvite(
+        inviteCode: String,
+    ): com.localfix.app.data.auth.WorkspaceMembership {
+        val responseBody = execute(
+            method = "POST",
+            path = "/auth/resident-invites/redeem",
+            requestBody = json.encodeToString(
+                ResidentInviteRedemptionPayload(inviteCode),
+            ),
+        )
+        return json.decodeFromString<ResidentInviteRedemptionResponse>(responseBody)
+            .membership
+            .toDomain()
+    }
+
     override suspend fun registerPushDevice(
         role: String,
         request: PushRegistrationPayload,
