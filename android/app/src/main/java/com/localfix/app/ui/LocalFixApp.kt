@@ -18,6 +18,7 @@ import com.localfix.app.ui.auth.AuthStatus
 import com.localfix.app.ui.auth.AuthViewModel
 import com.localfix.app.ui.auth.CheckingSessionScreen
 import com.localfix.app.ui.auth.JoinWorkspaceScreen
+import com.localfix.app.ui.auth.PasswordResetScreen
 import com.localfix.app.ui.auth.SignInScreen
 import com.localfix.app.ui.auth.VerifyEmailScreen
 import com.localfix.app.ui.auth.WorkspaceAccessScreen
@@ -61,11 +62,25 @@ fun LocalFixApp(
                     onCreateAccount = authViewModel::createAccount,
                     onShowSignIn = authViewModel::showSignIn,
                     onShowCreateAccount = authViewModel::showCreateAccount,
+                    onForgotPassword = authViewModel::showPasswordReset,
+                )
+                AuthStatus.RESET_PASSWORD,
+                AuthStatus.SENDING_PASSWORD_RESET,
+                -> PasswordResetScreen(
+                    email = authUiState.email,
+                    emailError = authUiState.emailError,
+                    message = authUiState.message,
+                    isSending = authUiState.status == AuthStatus.SENDING_PASSWORD_RESET,
+                    onEmailChange = authViewModel::updateEmail,
+                    onSendReset = authViewModel::sendPasswordReset,
+                    onBackToSignIn = authViewModel::returnToSignIn,
                 )
                 AuthStatus.VERIFY_EMAIL -> VerifyEmailScreen(
                     email = authUiState.email,
                     message = authUiState.message,
                     onCheckVerification = authViewModel::confirmEmailVerified,
+                    onResendVerification = authViewModel::resendEmailVerification,
+                    isResending = authUiState.isResendingVerification,
                     onSignOut = authViewModel::signOut,
                 )
                 AuthStatus.NO_WORKSPACE,

@@ -93,11 +93,63 @@ class AuthViewModelTest {
         assertEquals("", viewModel.uiState.value.password)
     }
 
+    @Test
+    fun passwordResetUsesFirebaseWithoutRevealingWhetherAccountExists() = runTest {
+        val authRepository = FakeAuthRepository()
+        val viewModel = AuthViewModel(
+            authRepository = authRepository,
+            authSessionApi = FakeAuthSessionApi(residentSession()),
+        )
+        viewModel.showPasswordReset()
+        viewModel.updateEmail("resident@example.com")
+
+        viewModel.sendPasswordReset()
+        advanceUntilIdle()
+
+        assertEquals(AuthStatus.RESET_PASSWORD, viewModel.uiState.value.status)
+        assertEquals(
+            listOf("resident@example.com"),
+            authRepository.passwordResetEmails,
+        )
+        assertEquals(
+            true,
+            viewModel.uiState.value.message?.startsWith("If an account exists"),
+        )
+    }
+
+    @Test
+    fun unverifiedResidentCanRequestAnotherVerificationEmail() = runTest {
+        val authRepository = FakeAuthRepository()
+        val viewModel = AuthViewModel(
+            authRepository = authRepository,
+            authSessionApi = FakeAuthSessionApi(residentSession()),
+        )
+        viewModel.showCreateAccount()
+        viewModel.updateEmail("new-resident@example.com")
+        viewModel.updatePassword("safe-password")
+        viewModel.updateConfirmPassword("safe-password")
+        viewModel.updateInviteCode("LF-2345-6789-ABCD")
+        viewModel.createAccount()
+        advanceUntilIdle()
+
+        viewModel.resendEmailVerification()
+        advanceUntilIdle()
+
+        assertEquals(1, authRepository.verificationResendCount)
+        assertEquals(false, viewModel.uiState.value.isResendingVerification)
+        assertEquals(
+            "A new verification email was sent to new-resident@example.com.",
+            viewModel.uiState.value.message,
+        )
+    }
+
     private class FakeAuthRepository : AuthRepository {
         override var currentUser: AuthenticatedUser? = null
         var lastEmail: String? = null
         var signInCount = 0
         var createAccountCount = 0
+        val passwordResetEmails = mutableListOf<String>()
+        var verificationResendCount = 0
 
         override suspend fun signIn(email: String, password: String) {
             signInCount += 1
@@ -121,6 +173,15 @@ class AuthViewModelTest {
         }
 
         override suspend fun refreshCurrentUser(): AuthenticatedUser? = currentUser
+
+        override suspend fun sendPasswordReset(email: String) {
+            passwordResetEmails += email
+        }
+
+        override suspend fun resendEmailVerification() {
+            check(currentUser != null)
+            verificationResendCount += 1
+        }
 
         override fun signOut() {
             currentUser = null

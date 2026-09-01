@@ -37,6 +37,10 @@ interface AuthRepository : AuthTokenProvider {
 
     suspend fun refreshCurrentUser(): AuthenticatedUser?
 
+    suspend fun sendPasswordReset(email: String)
+
+    suspend fun resendEmailVerification()
+
     fun signOut()
 }
 
@@ -66,6 +70,17 @@ class FirebaseAuthRepository(
         firebaseAuth.currentUser?.reload()?.await()
         firebaseAuth.currentUser?.getIdToken(true)?.await()
         return currentUser
+    }
+
+    override suspend fun sendPasswordReset(email: String) {
+        firebaseAuth.sendPasswordResetEmail(email).await()
+    }
+
+    override suspend fun resendEmailVerification() {
+        val user = requireNotNull(firebaseAuth.currentUser) {
+            "A signed-in Firebase user is required."
+        }
+        user.sendEmailVerification().await()
     }
 
     override fun signOut() {

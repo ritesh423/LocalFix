@@ -56,6 +56,7 @@ fun SignInScreen(
     onCreateAccount: () -> Unit,
     onShowSignIn: () -> Unit,
     onShowCreateAccount: () -> Unit,
+    onForgotPassword: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var passwordVisible by remember { mutableStateOf(false) }
@@ -236,6 +237,15 @@ fun SignInScreen(
                 }
             }
             Spacer(modifier = Modifier.height(LocalFixSpacing.medium))
+            if (!isCreateAccount) {
+                TextButton(
+                    onClick = onForgotPassword,
+                    modifier = Modifier.align(Alignment.End),
+                    enabled = !isBusy,
+                ) {
+                    Text("Forgot password?")
+                }
+            }
             TextButton(
                 onClick = if (isCreateAccount) onShowSignIn else onShowCreateAccount,
                 modifier = Modifier.align(Alignment.CenterHorizontally),
@@ -318,6 +328,8 @@ fun VerifyEmailScreen(
     email: String,
     message: String?,
     onCheckVerification: () -> Unit,
+    onResendVerification: () -> Unit,
+    isResending: Boolean,
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -327,9 +339,91 @@ fun VerifyEmailScreen(
         message = message,
         primaryLabel = "I've verified my email",
         onPrimary = onCheckVerification,
+        secondaryLabel = if (isResending) {
+            "Sending another email…"
+        } else {
+            "Send another verification email"
+        },
+        onSecondary = onResendVerification,
+        secondaryEnabled = !isResending,
         onSignOut = onSignOut,
         modifier = modifier,
     )
+}
+
+@Composable
+fun PasswordResetScreen(
+    email: String,
+    emailError: String?,
+    message: String?,
+    isSending: Boolean,
+    onEmailChange: (String) -> Unit,
+    onSendReset: () -> Unit,
+    onBackToSignIn: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .imePadding()
+            .padding(LocalFixSpacing.large),
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text("Reset your password", style = MaterialTheme.typography.headlineSmall)
+        Spacer(modifier = Modifier.height(LocalFixSpacing.small))
+        Text(
+            "Firebase will email you a secure link for choosing a new password.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyLarge,
+        )
+        Spacer(modifier = Modifier.height(LocalFixSpacing.large))
+        OutlinedTextField(
+            value = email,
+            onValueChange = onEmailChange,
+            modifier = Modifier.fillMaxWidth().testTag("password-reset-email"),
+            enabled = !isSending,
+            label = { Text("Email") },
+            singleLine = true,
+            isError = emailError != null,
+            supportingText = emailError?.let { error -> { Text(error) } },
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Email,
+                imeAction = ImeAction.Done,
+            ),
+            keyboardActions = KeyboardActions(onDone = { onSendReset() }),
+        )
+        message?.let {
+            Spacer(modifier = Modifier.height(LocalFixSpacing.medium))
+            Text(
+                text = it,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        Spacer(modifier = Modifier.height(LocalFixSpacing.large))
+        Button(
+            onClick = onSendReset,
+            modifier = Modifier.fillMaxWidth().height(56.dp),
+            enabled = !isSending,
+        ) {
+            if (isSending) {
+                CircularProgressIndicator(
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    strokeWidth = 2.dp,
+                )
+            } else {
+                Text("Send reset link")
+            }
+        }
+        TextButton(
+            onClick = onBackToSignIn,
+            modifier = Modifier.align(Alignment.CenterHorizontally),
+            enabled = !isSending,
+        ) {
+            Text("Back to sign in")
+        }
+    }
 }
 
 @Composable
@@ -411,6 +505,9 @@ private fun OnboardingActionScreen(
     message: String?,
     primaryLabel: String,
     onPrimary: () -> Unit,
+    secondaryLabel: String? = null,
+    onSecondary: (() -> Unit)? = null,
+    secondaryEnabled: Boolean = true,
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -436,6 +533,15 @@ private fun OnboardingActionScreen(
         Spacer(modifier = Modifier.height(LocalFixSpacing.large))
         Button(onClick = onPrimary, modifier = Modifier.fillMaxWidth()) {
             Text(primaryLabel)
+        }
+        if (secondaryLabel != null && onSecondary != null) {
+            Spacer(modifier = Modifier.height(LocalFixSpacing.extraSmall))
+            TextButton(
+                onClick = onSecondary,
+                enabled = secondaryEnabled,
+            ) {
+                Text(secondaryLabel)
+            }
         }
         Spacer(modifier = Modifier.height(LocalFixSpacing.small))
         TextButton(onClick = onSignOut) {

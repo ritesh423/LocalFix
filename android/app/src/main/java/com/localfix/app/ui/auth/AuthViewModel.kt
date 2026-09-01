@@ -67,6 +67,68 @@ class AuthViewModel(
         changeMode(AuthMode.CREATE_ACCOUNT)
     }
 
+    fun showPasswordReset() {
+        mutableUiState.update {
+            it.copy(
+                status = AuthStatus.RESET_PASSWORD,
+                mode = AuthMode.SIGN_IN,
+                password = "",
+                emailError = null,
+                passwordError = null,
+                message = null,
+            )
+        }
+    }
+
+    fun returnToSignIn() {
+        mutableUiState.update {
+            it.copy(
+                status = AuthStatus.SIGNED_OUT,
+                mode = AuthMode.SIGN_IN,
+                password = "",
+                emailError = null,
+                passwordError = null,
+                message = null,
+            )
+        }
+    }
+
+    fun sendPasswordReset() {
+        val email = mutableUiState.value.email.trim()
+        val emailError = validateEmail(email)
+        if (emailError != null) {
+            mutableUiState.update { it.copy(emailError = emailError) }
+            return
+        }
+        mutableUiState.update {
+            it.copy(
+                status = AuthStatus.SENDING_PASSWORD_RESET,
+                email = email,
+                emailError = null,
+                message = null,
+            )
+        }
+        viewModelScope.launch {
+            runCatching { authRepository.sendPasswordReset(email) }
+                .onSuccess {
+                    mutableUiState.update {
+                        it.copy(
+                            status = AuthStatus.RESET_PASSWORD,
+                            message = "If an account exists for $email, Firebase has sent a password reset link.",
+                        )
+                    }
+                }
+                .onFailure {
+                    mutableUiState.update {
+                        it.copy(
+                            status = AuthStatus.RESET_PASSWORD,
+                            message = "We couldn't send the reset link. Check your connection and try again.",
+                        )
+                    }
+                }
+        }
+    }
+
     fun signIn() {
         val current = mutableUiState.value
         val email = current.email.trim()
@@ -200,6 +262,32 @@ class AuthViewModel(
                         it.copy(
                             status = AuthStatus.VERIFY_EMAIL,
                             message = "We couldn't check your email verification. Try again.",
+                        )
+                    }
+                }
+        }
+    }
+
+    fun resendEmailVerification() {
+        if (mutableUiState.value.isResendingVerification) return
+        mutableUiState.update {
+            it.copy(isResendingVerification = true, message = null)
+        }
+        viewModelScope.launch {
+            runCatching { authRepository.resendEmailVerification() }
+                .onSuccess {
+                    mutableUiState.update {
+                        it.copy(
+                            isResendingVerification = false,
+                            message = "A new verification email was sent to ${it.email}.",
+                        )
+                    }
+                }
+                .onFailure {
+                    mutableUiState.update {
+                        it.copy(
+                            isResendingVerification = false,
+                            message = "We couldn't resend the email. Wait a moment and try again.",
                         )
                     }
                 }

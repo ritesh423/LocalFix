@@ -7,6 +7,8 @@ enum class AuthStatus {
     SIGNED_OUT,
     SIGNING_IN,
     SIGNING_UP,
+    RESET_PASSWORD,
+    SENDING_PASSWORD_RESET,
     VERIFY_EMAIL,
     JOINING_WORKSPACE,
     AUTHENTICATED,
@@ -33,4 +35,5 @@ data class AuthUiState(
     val inviteCodeError: String? = null,
     val message: String? = null,
     val session: AuthSession? = null,
+    val isResendingVerification: Boolean = false,
 )
