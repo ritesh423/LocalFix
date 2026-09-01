@@ -17,6 +17,7 @@ from app.database.config import (
     is_authentication_required,
 )
 from app.database.session import create_database_engine, create_session_factory
+from app.demo import DEMO_WORKERS
 from app.gateways.identity import FirebaseIdentityTokenVerifier, IdentityTokenVerifier
 from app.repositories.device_registrations import (
     DeviceRegistrationRepository,
@@ -46,8 +47,15 @@ from app.repositories.sqlalchemy_properties import SqlAlchemyPropertyRepository
 from app.repositories.sqlalchemy_resident_invites import (
     SqlAlchemyResidentInviteRepository,
 )
+from app.repositories.sqlalchemy_staff_invites import SqlAlchemyStaffInviteRepository
 from app.repositories.sqlalchemy_tickets import SqlAlchemyTicketRepository
+from app.repositories.sqlalchemy_workers import SqlAlchemyWorkerRepository
+from app.repositories.staff_invites import (
+    InMemoryStaffInviteRepository,
+    StaffInviteRepository,
+)
 from app.repositories.tickets import InMemoryTicketRepository, TicketRepository
+from app.repositories.workers import InMemoryWorkerRepository, WorkerRepository
 from app.storage.evidence import EvidenceStorage, LocalEvidenceStorage
 
 
@@ -59,12 +67,14 @@ def create_app(
     membership_repository: MembershipRepository | None = None,
     property_repository: PropertyRepository | None = None,
     resident_invite_repository: ResidentInviteRepository | None = None,
+    staff_invite_repository: StaffInviteRepository | None = None,
+    worker_repository: WorkerRepository | None = None,
     identity_token_verifier: IdentityTokenVerifier | None = None,
     authentication_required: bool = False,
 ) -> FastAPI:
     application = FastAPI(
         title="LocalFix API",
-        version="0.13.0",
+        version="0.14.0",
         description="Apartment maintenance workflow API.",
     )
     session_factory = None
@@ -111,12 +121,26 @@ def create_app(
             if session_factory is not None
             else InMemoryResidentInviteRepository()
         )
+    if staff_invite_repository is None:
+        staff_invite_repository = (
+            SqlAlchemyStaffInviteRepository(session_factory)
+            if session_factory is not None
+            else InMemoryStaffInviteRepository()
+        )
+    if worker_repository is None:
+        worker_repository = (
+            SqlAlchemyWorkerRepository(session_factory)
+            if session_factory is not None
+            else InMemoryWorkerRepository(DEMO_WORKERS)
+        )
     application.state.ticket_repository = repository
     application.state.device_registration_repository = device_registration_repository
     application.state.notification_outbox_repository = notification_outbox_repository
     application.state.membership_repository = membership_repository
     application.state.property_repository = property_repository
     application.state.resident_invite_repository = resident_invite_repository
+    application.state.staff_invite_repository = staff_invite_repository
+    application.state.worker_repository = worker_repository
     application.state.identity_token_verifier = (
         identity_token_verifier
         or FirebaseIdentityTokenVerifier(project_id=get_firebase_project_id())

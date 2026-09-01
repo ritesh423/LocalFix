@@ -116,9 +116,8 @@ class TicketReviewRequest(BaseModel):
     def validate_decision_fields(self) -> "TicketReviewRequest":
         if self.decision is ResidentReviewDecision.CONFIRM and self.rating is None:
             raise ValueError("A rating is required to confirm the repair.")
-        if (
-            self.decision is ResidentReviewDecision.REQUEST_REWORK
-            and (self.feedback is None or len(self.feedback.strip()) < 10)
+        if self.decision is ResidentReviewDecision.REQUEST_REWORK and (
+            self.feedback is None or len(self.feedback.strip()) < 10
         ):
             raise ValueError(
                 "Describe what still needs attention in at least 10 characters."
@@ -193,6 +192,18 @@ class ManagerResidentInviteResponse(BaseModel):
     invite_code: str
     unit_id: UUID
     unit_label: str
+    expires_at: datetime
+
+
+class ManagerWorkerInviteCreateRequest(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    specialty: ServiceCategory
+    valid_days: int = Field(default=7, ge=1, le=30)
+
+
+class ManagerWorkerInviteResponse(BaseModel):
+    invite_code: str
+    worker: WorkerResponse
     expires_at: datetime
 
 

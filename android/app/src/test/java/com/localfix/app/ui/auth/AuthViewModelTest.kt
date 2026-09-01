@@ -195,7 +195,7 @@ class AuthViewModelTest {
     ) : AuthSessionApi {
         override suspend fun getAuthSession(): AuthSession = session
 
-        override suspend fun redeemResidentInvite(
+        override suspend fun redeemInvite(
             inviteCode: String,
         ): WorkspaceMembership = session.memberships.first()
     }

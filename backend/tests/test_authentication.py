@@ -9,6 +9,7 @@ from app.database.session import create_database_engine, create_session_factory
 from app.domain.auth import AuthenticatedIdentity, PropertyMembership
 from app.domain.properties import Property, PropertyUnit
 from app.domain.ticket_workflow import UserRole
+from app.domain.tickets import ServiceCategory
 from app.gateways.identity import (
     FirebaseIdentityTokenVerifier,
     InvalidIdentityTokenError,
@@ -20,8 +21,11 @@ from app.repositories.resident_invites import InMemoryResidentInviteRepository
 from app.repositories.sqlalchemy_memberships import (
     SqlAlchemyMembershipRepository,
 )
+from app.repositories.staff_invites import InMemoryStaffInviteRepository
 from app.repositories.tickets import InMemoryTicketRepository
+from app.repositories.workers import InMemoryWorkerRepository
 from app.services.resident_invites import ResidentInviteService
+from app.services.staff_invites import StaffInviteService
 
 
 class FakeIdentityTokenVerifier:
@@ -65,12 +69,16 @@ class AuthenticationApiTest(unittest.TestCase):
             )
         )
         self.invites = InMemoryResidentInviteRepository()
+        self.staff_invites = InMemoryStaffInviteRepository()
+        self.workers = InMemoryWorkerRepository()
         self.client = TestClient(
             create_app(
                 self.ticket_repository,
                 membership_repository=self.memberships,
                 property_repository=self.properties,
                 resident_invite_repository=self.invites,
+                staff_invite_repository=self.staff_invites,
+                worker_repository=self.workers,
                 identity_token_verifier=FakeIdentityTokenVerifier(),
                 authentication_required=True,
             )
@@ -152,6 +160,32 @@ class AuthenticationApiTest(unittest.TestCase):
             response.json()["membership"]["unit_label"],
             "Apartment A-204",
         )
+
+    def test_verified_firebase_user_can_join_as_an_invited_worker(self) -> None:
+        created = StaffInviteService(
+            self.staff_invites,
+            self.memberships,
+            self.properties,
+            self.workers,
+        ).create_worker_invite(
+            self.resident_membership.property_id,
+            "Dev Mehta",
+            ServiceCategory.ELECTRICAL,
+        )
+
+        response = self.client.post(
+            "/auth/invites/redeem",
+            headers=self.authorization_header(),
+            json={"invite_code": created.code},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["membership"]["role"], "worker")
+        self.assertEqual(
+            response.json()["membership"]["user_id"],
+            str(created.worker.id),
+        )
+        self.assertIsNone(response.json()["membership"]["unit_label"])
 
     def test_authenticated_resident_identity_owns_the_created_ticket(self) -> None:
         response = self.client.post(

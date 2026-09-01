@@ -23,6 +23,7 @@ from app.domain.tickets import (
     WorkerContext,
 )
 from app.repositories.tickets import TicketRepository
+from app.repositories.workers import WorkerRepository
 from app.services.notifications import TicketNotificationPlanner
 from app.storage.evidence import EvidenceStorage, StoredEvidence
 
@@ -115,10 +116,12 @@ class TicketService:
         repository: TicketRepository,
         workers: Iterable[Worker] = (),
         evidence_storage: EvidenceStorage | None = None,
+        worker_repository: WorkerRepository | None = None,
     ) -> None:
         self._repository = repository
         self._workers = {worker.id: worker for worker in workers}
         self._evidence_storage = evidence_storage
+        self._worker_repository = worker_repository
         self._notification_planner = TicketNotificationPlanner()
 
     def create_ticket(
@@ -229,6 +232,8 @@ class TicketService:
         return self._repository.list_events(ticket_id)
 
     def list_workers(self, manager: ManagerContext) -> list[Worker]:
+        if self._worker_repository is not None:
+            return self._worker_repository.list_active(manager.property_id)
         return sorted(
             (
                 worker
@@ -511,7 +516,11 @@ class TicketService:
         if ticket.version != command.expected_version:
             raise TicketVersionConflictError
 
-        worker = self._workers.get(command.worker_id)
+        worker = (
+            self._worker_repository.get(manager.property_id, command.worker_id)
+            if self._worker_repository is not None
+            else self._workers.get(command.worker_id)
+        )
         if (
             worker is None
             or worker.property_id != manager.property_id

@@ -183,8 +183,8 @@ fun SignInScreen(
                         .fillMaxWidth()
                         .testTag("sign-up-invite-code"),
                     enabled = !isBusy,
-                    label = { Text("Apartment invite code") },
-                    placeholder = { Text("LF-XXXX-XXXX-XXXX") },
+                    label = { Text("LocalFix invite code") },
+                    placeholder = { Text("LF- or LFW-XXXX-XXXX-XXXX") },
                     singleLine = true,
                     isError = uiState.inviteCodeError != null,
                     supportingText = uiState.inviteCodeError?.let { message ->
@@ -303,7 +303,7 @@ private fun SignInHeader(isCreateAccount: Boolean) {
         Spacer(modifier = Modifier.height(LocalFixSpacing.extraLarge))
         Text(
             text = if (isCreateAccount) {
-                "Join the right apartment."
+                "Join the right LocalFix workspace."
             } else {
                 "Your building, one sign-in."
             },
@@ -445,10 +445,10 @@ fun JoinWorkspaceScreen(
             .padding(LocalFixSpacing.large),
         verticalArrangement = Arrangement.Center,
     ) {
-        Text("Join your apartment", style = MaterialTheme.typography.headlineSmall)
+        Text("Join your workspace", style = MaterialTheme.typography.headlineSmall)
         Spacer(modifier = Modifier.height(LocalFixSpacing.small))
         Text(
-            "Enter the invite code provided by your apartment manager.",
+            "Enter the invite code provided by your LocalFix manager.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodyLarge,
         )
@@ -458,8 +458,8 @@ fun JoinWorkspaceScreen(
             onValueChange = onInviteCodeChange,
             modifier = Modifier.fillMaxWidth().testTag("join-invite-code"),
             enabled = !isJoining,
-            label = { Text("Apartment invite code") },
-            placeholder = { Text("LF-XXXX-XXXX-XXXX") },
+            label = { Text("LocalFix invite code") },
+            placeholder = { Text("LF- or LFW-XXXX-XXXX-XXXX") },
             isError = inviteCodeError != null,
             supportingText = inviteCodeError?.let { error -> { Text(error) } },
             singleLine = true,
@@ -485,7 +485,7 @@ fun JoinWorkspaceScreen(
                     strokeWidth = 2.dp,
                 )
             } else {
-                Text("Join apartment")
+                Text("Join workspace")
             }
         }
         TextButton(

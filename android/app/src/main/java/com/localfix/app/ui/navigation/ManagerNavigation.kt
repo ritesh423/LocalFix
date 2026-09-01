@@ -16,6 +16,7 @@ import com.localfix.app.ui.manager.ManagerAssignmentScreen
 import com.localfix.app.ui.manager.ManagerQueueScreen
 import com.localfix.app.ui.manager.ManagerResidentInviteScreen
 import com.localfix.app.ui.manager.ManagerViewModel
+import com.localfix.app.ui.manager.ManagerWorkerInviteScreen
 
 @Composable
 fun ManagerNavigation(
@@ -56,6 +57,10 @@ fun ManagerNavigation(
                     managerViewModel.openResidentInvite()
                     navController.navigate(MANAGER_RESIDENT_INVITE_ROUTE)
                 },
+                onInviteWorker = {
+                    managerViewModel.openWorkerInvite()
+                    navController.navigate(MANAGER_WORKER_INVITE_ROUTE)
+                },
                 onSwitchRole = onSwitchRole,
             )
         }
@@ -66,6 +71,18 @@ fun ManagerNavigation(
                 onCreateInvite = managerViewModel::createResidentInvite,
                 onBack = {
                     managerViewModel.closeResidentInvite()
+                    navController.popBackStack()
+                },
+            )
+        }
+        composable(MANAGER_WORKER_INVITE_ROUTE) {
+            ManagerWorkerInviteScreen(
+                uiState = uiState.workerInvite,
+                onNameChange = managerViewModel::updateWorkerName,
+                onSpecialtySelected = managerViewModel::selectWorkerSpecialty,
+                onCreateInvite = managerViewModel::createWorkerInvite,
+                onBack = {
+                    managerViewModel.closeWorkerInvite()
                     navController.popBackStack()
                 },
             )
@@ -95,6 +112,7 @@ fun ManagerNavigation(
 
 private const val MANAGER_QUEUE_ROUTE = "manager/queue"
 private const val MANAGER_RESIDENT_INVITE_ROUTE = "manager/resident-invite"
+private const val MANAGER_WORKER_INVITE_ROUTE = "manager/worker-invite"
 private const val MANAGER_TICKET_ID_ARGUMENT = "ticketId"
 private const val MANAGER_TICKET_ROUTE = "manager/tickets/{$MANAGER_TICKET_ID_ARGUMENT}"
 

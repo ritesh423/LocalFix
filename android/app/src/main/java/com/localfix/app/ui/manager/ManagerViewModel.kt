@@ -12,6 +12,7 @@ import com.localfix.app.data.manager.ManagerSyncState
 import com.localfix.app.data.manager.ManagerTicket
 import com.localfix.app.data.model.AccessWindow
 import com.localfix.app.data.model.RequestDeliveryState
+import com.localfix.app.data.model.ServiceCategory
 import com.localfix.app.data.model.TicketStatus
 import com.localfix.app.data.model.UrgencySuggestion
 import com.localfix.app.ui.components.RequestLoadUiState
@@ -172,6 +173,65 @@ class ManagerViewModel(
         selection.value = ManagerSelection()
     }
 
+    fun openWorkerInvite() {
+        selection.value = ManagerSelection()
+    }
+
+    fun updateWorkerName(name: String) {
+        selection.update {
+            it.copy(
+                workerName = name.take(120),
+                workerInviteCode = null,
+                workerInviteErrorMessage = null,
+            )
+        }
+    }
+
+    fun selectWorkerSpecialty(specialty: ServiceCategory) {
+        selection.update {
+            it.copy(
+                workerSpecialty = specialty,
+                workerInviteCode = null,
+                workerInviteErrorMessage = null,
+            )
+        }
+    }
+
+    fun createWorkerInvite() {
+        val name = selection.value.workerName.trim()
+        val specialty = selection.value.workerSpecialty
+        if (name.length < 2 || selection.value.isCreatingWorkerInvite) return
+        selection.update {
+            it.copy(isCreatingWorkerInvite = true, workerInviteErrorMessage = null)
+        }
+        viewModelScope.launch {
+            runCatching {
+                repository.createWorkerInvite(name, specialty)
+            }.onSuccess { invite ->
+                selection.update {
+                    it.copy(
+                        isCreatingWorkerInvite = false,
+                        workerInviteCode = invite.inviteCode,
+                        invitedWorkerName = invite.worker.name,
+                        workerInviteExpiresAt = invite.expiresAt,
+                    )
+                }
+            }.onFailure {
+                selection.update {
+                    it.copy(
+                        isCreatingWorkerInvite = false,
+                        workerInviteErrorMessage =
+                            "Couldn't invite this worker. Check your connection and try again.",
+                    )
+                }
+            }
+        }
+    }
+
+    fun closeWorkerInvite() {
+        selection.value = ManagerSelection()
+    }
+
     companion object {
         fun factory(repository: ManagerRepository): ViewModelProvider.Factory =
             viewModelFactory {
@@ -193,6 +253,13 @@ private data class ManagerSelection(
     val inviteUnitLabel: String? = null,
     val inviteExpiresAt: String? = null,
     val inviteErrorMessage: String? = null,
+    val workerName: String = "",
+    val workerSpecialty: ServiceCategory = ServiceCategory.PLUMBING,
+    val isCreatingWorkerInvite: Boolean = false,
+    val workerInviteCode: String? = null,
+    val invitedWorkerName: String? = null,
+    val workerInviteExpiresAt: String? = null,
+    val workerInviteErrorMessage: String? = null,
 )
 
 private fun createManagerUiState(
@@ -243,6 +310,15 @@ private fun createManagerUiState(
             inviteUnitLabel = selection.inviteUnitLabel,
             expiresAt = selection.inviteExpiresAt,
             errorMessage = selection.inviteErrorMessage,
+        ),
+        workerInvite = ManagerWorkerInviteUiState(
+            name = selection.workerName,
+            specialty = selection.workerSpecialty,
+            isCreating = selection.isCreatingWorkerInvite,
+            inviteCode = selection.workerInviteCode,
+            invitedWorkerName = selection.invitedWorkerName,
+            expiresAt = selection.workerInviteExpiresAt,
+            errorMessage = selection.workerInviteErrorMessage,
         ),
     )
 }

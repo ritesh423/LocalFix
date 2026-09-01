@@ -356,7 +356,7 @@ class AuthViewModel(
 
     private suspend fun redeemInvite() {
         val inviteCode = mutableUiState.value.inviteCode.trim()
-        runCatching { authSessionApi.redeemResidentInvite(inviteCode) }
+        runCatching { authSessionApi.redeemInvite(inviteCode) }
             .onSuccess { loadWorkspaceSession() }
             .onFailure {
                 mutableUiState.update {
@@ -395,7 +395,7 @@ class AuthViewModel(
 
     private fun validateInviteCode(inviteCode: String): String? =
         if (inviteCode.count(Char::isLetterOrDigit) < 8) {
-            "Enter the invite code from your apartment manager"
+            "Enter the invite code from your LocalFix manager"
         } else {
             null
         }

@@ -9,6 +9,7 @@ data class ManagerUiState(
     val queue: ManagerQueueUiState,
     val assignment: ManagerAssignmentUiState,
     val residentInvite: ManagerResidentInviteUiState,
+    val workerInvite: ManagerWorkerInviteUiState,
 )
 
 data class ManagerQueueUiState(
@@ -97,3 +98,16 @@ data class ManagerPropertyUnitItem(
     val id: String,
     val label: String,
 )
+
+data class ManagerWorkerInviteUiState(
+    val name: String = "",
+    val specialty: ServiceCategory = ServiceCategory.PLUMBING,
+    val isCreating: Boolean = false,
+    val inviteCode: String? = null,
+    val invitedWorkerName: String? = null,
+    val expiresAt: String? = null,
+    val errorMessage: String? = null,
+) {
+    val canCreate: Boolean
+        get() = name.trim().length >= 2 && !isCreating && inviteCode == null
+}

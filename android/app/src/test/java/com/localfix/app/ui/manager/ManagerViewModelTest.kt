@@ -96,6 +96,26 @@ class ManagerViewModelTest {
         assertFalse(invite.canCreate)
     }
 
+    @Test
+    fun managerCanCreateAWorkerAndReceiveTheirSignupCode() = runTest {
+        val viewModel = ManagerViewModel(SampleManagerRepository())
+        advanceUntilIdle()
+
+        viewModel.openWorkerInvite()
+        viewModel.updateWorkerName("Dev Mehta")
+        viewModel.selectWorkerSpecialty(ServiceCategory.ELECTRICAL)
+        viewModel.createWorkerInvite()
+        advanceUntilIdle()
+
+        val invite = viewModel.uiState.value.workerInvite
+        assertEquals("Dev Mehta", invite.invitedWorkerName)
+        assertTrue(invite.inviteCode?.startsWith("LFW-") == true)
+        assertFalse(invite.canCreate)
+        assertTrue(
+            viewModel.uiState.value.assignment.workers.any { it.name == "Dev Mehta" },
+        )
+    }
+
     private companion object {
         const val OPEN_TICKET_ID = "90000000-0000-0000-0000-000000000001"
         const val PLUMBER_ID = "40000000-0000-0000-0000-000000000001"

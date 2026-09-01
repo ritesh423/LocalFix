@@ -8,13 +8,17 @@ from app.api.dependencies import (
     MembershipRepositoryDependency,
     PropertyRepositoryDependency,
     ResidentInviteRepositoryDependency,
+    StaffInviteRepositoryDependency,
     TicketServiceDependency,
+    WorkerRepositoryDependency,
 )
 from app.api.schemas import (
     ManagerPropertyUnitResponse,
     ManagerResidentInviteCreateRequest,
     ManagerResidentInviteResponse,
     ManagerTicketSummaryResponse,
+    ManagerWorkerInviteCreateRequest,
+    ManagerWorkerInviteResponse,
     TicketAssignmentRequest,
     TicketEventResponse,
     TicketResponse,
@@ -25,6 +29,7 @@ from app.services.resident_invites import (
     InvalidResidentInviteError,
     ResidentInviteService,
 )
+from app.services.staff_invites import InvalidStaffInviteError, StaffInviteService
 from app.services.tickets import (
     TicketNotFoundError,
     TicketVersionConflictError,
@@ -77,6 +82,39 @@ def create_resident_invite(
         invite_code=created.code,
         unit_id=unit.id,
         unit_label=unit.label,
+        expires_at=created.invite.expires_at,
+    )
+
+
+@router.post(
+    "/worker-invites",
+    response_model=ManagerWorkerInviteResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_worker_invite(
+    payload: ManagerWorkerInviteCreateRequest,
+    manager: ManagerContextDependency,
+    memberships: MembershipRepositoryDependency,
+    properties: PropertyRepositoryDependency,
+    invites: StaffInviteRepositoryDependency,
+    workers: WorkerRepositoryDependency,
+) -> ManagerWorkerInviteResponse:
+    service = StaffInviteService(invites, memberships, properties, workers)
+    try:
+        created = service.create_worker_invite(
+            property_id=manager.property_id,
+            name=payload.name,
+            specialty=payload.specialty,
+            valid_for=timedelta(days=payload.valid_days),
+        )
+    except InvalidStaffInviteError as error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "invalid_worker", "message": str(error)},
+        ) from error
+    return ManagerWorkerInviteResponse(
+        invite_code=created.code,
+        worker=WorkerResponse.from_domain(created.worker),
         expires_at=created.invite.expires_at,
     )
 

@@ -59,3 +59,11 @@ class ResidentInviteRedemptionRequest(BaseModel):
 
 class ResidentInviteRedemptionResponse(BaseModel):
     membership: MembershipResponse
+
+
+class InviteRedemptionRequest(BaseModel):
+    invite_code: str
+
+
+class InviteRedemptionResponse(BaseModel):
+    membership: MembershipResponse

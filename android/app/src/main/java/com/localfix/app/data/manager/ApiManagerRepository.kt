@@ -14,6 +14,8 @@ import com.localfix.app.data.remote.ManagerSummaryResponse
 import com.localfix.app.data.remote.ManagerPropertyUnitResponse
 import com.localfix.app.data.remote.ManagerResidentInviteCreatePayload
 import com.localfix.app.data.remote.ManagerResidentInviteResponse
+import com.localfix.app.data.remote.ManagerWorkerInviteCreatePayload
+import com.localfix.app.data.remote.ManagerWorkerInviteResponse
 import com.localfix.app.data.remote.TicketResponse
 import com.localfix.app.data.remote.WorkerResponse
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -91,6 +93,26 @@ class ApiManagerRepository(
     ): ManagerResidentInvite = ticketApi.createManagerResidentInvite(
         ManagerResidentInviteCreatePayload(unitId, validDays),
     ).toDomain()
+
+    override suspend fun createWorkerInvite(
+        name: String,
+        specialty: ServiceCategory,
+        validDays: Int,
+    ): ManagerWorkerInvite {
+        val invite = ticketApi.createManagerWorkerInvite(
+            ManagerWorkerInviteCreatePayload(
+                name = name,
+                specialty = specialty.name.lowercase(),
+                validDays = validDays,
+            ),
+        ).toDomain()
+        serverData.update { data ->
+            data.copy(
+                workers = (data.workers + invite.worker).distinctBy(ManagerWorker::id),
+            )
+        }
+        return invite
+    }
 
     override suspend fun assignTicket(
         ticketId: String,
@@ -231,6 +253,12 @@ private fun ManagerResidentInviteResponse.toDomain() = ManagerResidentInvite(
     inviteCode = inviteCode,
     unitId = unitId,
     unitLabel = unitLabel,
+    expiresAt = expiresAt,
+)
+
+private fun ManagerWorkerInviteResponse.toDomain() = ManagerWorkerInvite(
+    inviteCode = inviteCode,
+    worker = worker.toManagerWorker(),
     expiresAt = expiresAt,
 )
 

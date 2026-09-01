@@ -13,6 +13,12 @@ interface ManagerRepository {
         validDays: Int = 7,
     ): ManagerResidentInvite
 
+    suspend fun createWorkerInvite(
+        name: String,
+        specialty: com.localfix.app.data.model.ServiceCategory,
+        validDays: Int = 7,
+    ): ManagerWorkerInvite
+
     suspend fun assignTicket(
         ticketId: String,
         expectedVersion: Int,

@@ -45,6 +45,7 @@ fun ManagerQueueScreen(
     onTicketClick: (String) -> Unit,
     onRetry: () -> Unit,
     onInviteResident: () -> Unit,
+    onInviteWorker: () -> Unit = {},
     onSwitchRole: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -86,6 +87,27 @@ fun ManagerQueueScreen(
                 Icon(Icons.Outlined.PersonAdd, contentDescription = null)
                 Text(
                     text = "Invite a resident",
+                    modifier = Modifier.padding(start = LocalFixSpacing.small),
+                )
+            }
+        }
+        item {
+            OutlinedButton(
+                onClick = onInviteWorker,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        start = LocalFixSpacing.medium,
+                        end = LocalFixSpacing.medium,
+                        bottom = LocalFixSpacing.large,
+                    )
+                    .height(52.dp)
+                    .testTag("manager-invite-worker"),
+                shape = RoundedCornerShape(LocalFixRadius.medium),
+            ) {
+                Icon(Icons.Outlined.PersonAdd, contentDescription = null)
+                Text(
+                    text = "Invite a worker",
                     modifier = Modifier.padding(start = LocalFixSpacing.small),
                 )
             }

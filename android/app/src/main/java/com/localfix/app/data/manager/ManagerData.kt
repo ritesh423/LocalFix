@@ -26,6 +26,12 @@ data class ManagerResidentInvite(
     val expiresAt: String,
 )
 
+data class ManagerWorkerInvite(
+    val inviteCode: String,
+    val worker: ManagerWorker,
+    val expiresAt: String,
+)
+
 data class ManagerSummary(
     val totalRequests: Int,
     val activeRequests: Int,

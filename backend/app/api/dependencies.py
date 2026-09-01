@@ -4,64 +4,26 @@ from uuid import UUID
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from app.demo import (
+    DEMO_MANAGER_CONTEXT,
+    DEMO_RESIDENT_CONTEXT,
+    DEMO_WORKER_CONTEXT,
+    DEMO_WORKERS,
+)
 from app.domain.auth import AuthenticatedIdentity
 from app.domain.ticket_workflow import UserRole
-from app.domain.tickets import (
-    ManagerContext,
-    ResidentContext,
-    ServiceCategory,
-    Worker,
-    WorkerContext,
-)
+from app.domain.tickets import ManagerContext, ResidentContext, WorkerContext
 from app.gateways.identity import IdentityTokenVerifier, InvalidIdentityTokenError
 from app.repositories.device_registrations import DeviceRegistrationRepository
 from app.repositories.memberships import MembershipRepository
 from app.repositories.properties import PropertyRepository
 from app.repositories.resident_invites import ResidentInviteRepository
+from app.repositories.staff_invites import StaffInviteRepository
 from app.repositories.tickets import TicketRepository
+from app.repositories.workers import WorkerRepository
 from app.services.device_registrations import DeviceRegistrationService
 from app.services.tickets import TicketService
 from app.storage.evidence import EvidenceStorage
-
-DEMO_RESIDENT_CONTEXT = ResidentContext(
-    user_id=UUID("10000000-0000-0000-0000-000000000001"),
-    property_id=UUID("20000000-0000-0000-0000-000000000001"),
-    unit_id=UUID("30000000-0000-0000-0000-000000000204"),
-)
-
-DEMO_MANAGER_CONTEXT = ManagerContext(
-    user_id=UUID("10000000-0000-0000-0000-000000000002"),
-    property_id=UUID("20000000-0000-0000-0000-000000000001"),
-)
-
-DEMO_WORKERS = (
-    Worker(
-        id=UUID("40000000-0000-0000-0000-000000000001"),
-        property_id=DEMO_MANAGER_CONTEXT.property_id,
-        name="Arun Kumar",
-        specialty=ServiceCategory.PLUMBING,
-        is_active=True,
-    ),
-    Worker(
-        id=UUID("40000000-0000-0000-0000-000000000002"),
-        property_id=DEMO_MANAGER_CONTEXT.property_id,
-        name="Maya Singh",
-        specialty=ServiceCategory.ELECTRICAL,
-        is_active=True,
-    ),
-    Worker(
-        id=UUID("40000000-0000-0000-0000-000000000003"),
-        property_id=DEMO_MANAGER_CONTEXT.property_id,
-        name="Sameer Khan",
-        specialty=ServiceCategory.APPLIANCE,
-        is_active=True,
-    ),
-)
-
-DEMO_WORKER_CONTEXT = WorkerContext(
-    worker_id=DEMO_WORKERS[0].id,
-    property_id=DEMO_WORKERS[0].property_id,
-)
 
 bearer_token = HTTPBearer(auto_error=False)
 
@@ -74,14 +36,20 @@ def get_evidence_storage(request: Request) -> EvidenceStorage:
     return request.app.state.evidence_storage
 
 
+def get_worker_repository(request: Request) -> WorkerRepository:
+    return request.app.state.worker_repository
+
+
 def get_ticket_service(
     repository: Annotated[TicketRepository, Depends(get_ticket_repository)],
     evidence_storage: Annotated[EvidenceStorage, Depends(get_evidence_storage)],
+    workers: Annotated[WorkerRepository, Depends(get_worker_repository)],
 ) -> TicketService:
     return TicketService(
         repository,
         workers=DEMO_WORKERS,
         evidence_storage=evidence_storage,
+        worker_repository=workers,
     )
 
 
@@ -114,6 +82,10 @@ def get_property_repository(request: Request) -> PropertyRepository:
 
 def get_resident_invite_repository(request: Request) -> ResidentInviteRepository:
     return request.app.state.resident_invite_repository
+
+
+def get_staff_invite_repository(request: Request) -> StaffInviteRepository:
+    return request.app.state.staff_invite_repository
 
 
 def get_authenticated_identity(
@@ -215,6 +187,10 @@ def get_worker_context(
         PropertyRepository,
         Depends(get_property_repository),
     ],
+    workers: Annotated[
+        WorkerRepository,
+        Depends(get_worker_repository),
+    ],
 ) -> WorkerContext:
     if identity is None:
         return DEMO_WORKER_CONTEXT
@@ -222,6 +198,9 @@ def get_worker_context(
     if membership is None:
         _raise_forbidden("You do not have an active worker membership.")
     _require_active_property(properties, membership.property_id)
+    worker = workers.get(membership.property_id, membership.user_id)
+    if worker is None or not worker.is_active:
+        _raise_forbidden("Your worker profile is not active for this property.")
     return membership.worker_context()
 
 
@@ -281,4 +260,12 @@ PropertyRepositoryDependency = Annotated[
 ResidentInviteRepositoryDependency = Annotated[
     ResidentInviteRepository,
     Depends(get_resident_invite_repository),
+]
+StaffInviteRepositoryDependency = Annotated[
+    StaffInviteRepository,
+    Depends(get_staff_invite_repository),
+]
+WorkerRepositoryDependency = Annotated[
+    WorkerRepository,
+    Depends(get_worker_repository),
 ]

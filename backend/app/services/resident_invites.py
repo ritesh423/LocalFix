@@ -1,5 +1,3 @@
-import hashlib
-import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
@@ -9,12 +7,11 @@ from app.domain.ticket_workflow import UserRole
 from app.repositories.memberships import MembershipRepository
 from app.repositories.properties import PropertyRepository
 from app.repositories.resident_invites import ResidentInviteRepository
+from app.services.invite_codes import as_utc, digest_invite_code, generate_invite_code
 from app.services.memberships import (
     MembershipConflictError,
     MembershipProvisioningService,
 )
-
-INVITE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
 
 
 class InvalidResidentInviteError(ValueError):
@@ -68,13 +65,13 @@ class ResidentInviteService:
         if valid_for <= timedelta(0):
             raise InvalidResidentInviteError("Invite lifetime must be positive.")
 
-        created_at = _as_utc(now or datetime.now(UTC))
-        code = _generate_code()
+        created_at = as_utc(now or datetime.now(UTC))
+        code = generate_invite_code()
         invite = ResidentInvite(
             id=uuid4(),
             property_id=property_id,
             unit_id=unit_id,
-            code_digest=_digest(code),
+            code_digest=digest_invite_code(code),
             expires_at=created_at + valid_for,
             created_at=created_at,
         )
@@ -91,12 +88,12 @@ class ResidentInviteService:
             raise VerifiedEmailRequiredError(
                 "Verify your email address before joining an apartment."
             )
-        invite = self._invites.find_by_digest(_digest(code))
+        invite = self._invites.find_by_digest(digest_invite_code(code))
         if invite is None or invite.revoked_at is not None:
             raise InvalidResidentInviteError("Invite code is invalid.")
 
-        redeemed_at = _as_utc(now or datetime.now(UTC))
-        if _as_utc(invite.expires_at) <= redeemed_at:
+        redeemed_at = as_utc(now or datetime.now(UTC))
+        if as_utc(invite.expires_at) <= redeemed_at:
             raise ExpiredResidentInviteError("Invite code has expired.")
         if invite.claimed_by_firebase_uid not in (None, identity.firebase_uid):
             raise ResidentInviteAlreadyUsedError("Invite code has already been used.")
@@ -119,31 +116,16 @@ class ResidentInviteService:
         if claimed is None:
             raise ResidentInviteAlreadyUsedError("Invite code has already been used.")
 
-        return MembershipProvisioningService(
-            self._memberships,
-            self._properties,
-        ).provision(
-            firebase_uid=identity.firebase_uid,
-            property_id=invite.property_id,
-            role=UserRole.RESIDENT,
-            unit_id=invite.unit_id,
-        ).membership
-
-
-def _generate_code() -> str:
-    body = "".join(secrets.choice(INVITE_ALPHABET) for _ in range(12))
-    return f"LF-{body[:4]}-{body[4:8]}-{body[8:]}"
-
-
-def _normalize(code: str) -> str:
-    return "".join(character for character in code.upper() if character.isalnum())
-
-
-def _digest(code: str) -> str:
-    return hashlib.sha256(_normalize(code).encode("utf-8")).hexdigest()
-
-
-def _as_utc(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        return value.replace(tzinfo=UTC)
-    return value.astimezone(UTC)
+        return (
+            MembershipProvisioningService(
+                self._memberships,
+                self._properties,
+            )
+            .provision(
+                firebase_uid=identity.firebase_uid,
+                property_id=invite.property_id,
+                role=UserRole.RESIDENT,
+                unit_id=invite.unit_id,
+            )
+            .membership
+        )

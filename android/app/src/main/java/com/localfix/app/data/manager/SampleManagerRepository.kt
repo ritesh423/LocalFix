@@ -30,6 +30,24 @@ class SampleManagerRepository : ManagerRepository {
         )
     }
 
+    override suspend fun createWorkerInvite(
+        name: String,
+        specialty: ServiceCategory,
+        validDays: Int,
+    ): ManagerWorkerInvite {
+        val worker = ManagerWorker(
+            id = "40000000-0000-0000-0000-000000000004",
+            name = name,
+            specialty = specialty,
+        )
+        mutableData.update { data -> data.copy(workers = data.workers + worker) }
+        return ManagerWorkerInvite(
+            inviteCode = "LFW-7K9M-4N2P-8QRT",
+            worker = worker,
+            expiresAt = "2026-09-08T12:00:00Z",
+        )
+    }
+
     override suspend fun assignTicket(
         ticketId: String,
         expectedVersion: Int,

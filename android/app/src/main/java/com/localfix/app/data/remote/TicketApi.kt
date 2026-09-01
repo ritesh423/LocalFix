@@ -39,6 +39,10 @@ interface ManagerTicketApi {
         request: ManagerResidentInviteCreatePayload,
     ): ManagerResidentInviteResponse = error("Resident invites are not supported.")
 
+    suspend fun createManagerWorkerInvite(
+        request: ManagerWorkerInviteCreatePayload,
+    ): ManagerWorkerInviteResponse = error("Worker invites are not supported.")
+
     suspend fun assignTicket(
         ticketId: String,
         request: TicketAssignmentPayload,
@@ -138,6 +142,20 @@ data class ManagerResidentInviteResponse(
 )
 
 @Serializable
+data class ManagerWorkerInviteCreatePayload(
+    val name: String,
+    val specialty: String,
+    @SerialName("valid_days") val validDays: Int = 7,
+)
+
+@Serializable
+data class ManagerWorkerInviteResponse(
+    @SerialName("invite_code") val inviteCode: String,
+    val worker: WorkerResponse,
+    @SerialName("expires_at") val expiresAt: String,
+)
+
+@Serializable
 data class TicketResponse(
     val id: String,
     @SerialName("client_request_id") val clientRequestId: String,
@@ -200,17 +218,17 @@ class HttpTicketApi(
         return json.decodeFromString<AuthSessionResponse>(responseBody).toDomain()
     }
 
-    override suspend fun redeemResidentInvite(
+    override suspend fun redeemInvite(
         inviteCode: String,
     ): com.localfix.app.data.auth.WorkspaceMembership {
         val responseBody = execute(
             method = "POST",
-            path = "/auth/resident-invites/redeem",
+            path = "/auth/invites/redeem",
             requestBody = json.encodeToString(
-                ResidentInviteRedemptionPayload(inviteCode),
+                InviteRedemptionPayload(inviteCode),
             ),
         )
-        return json.decodeFromString<ResidentInviteRedemptionResponse>(responseBody)
+        return json.decodeFromString<InviteRedemptionResponse>(responseBody)
             .membership
             .toDomain()
     }
@@ -273,6 +291,17 @@ class HttpTicketApi(
         val responseBody = execute(
             method = "POST",
             path = "/manager/resident-invites",
+            requestBody = json.encodeToString(request),
+        )
+        return json.decodeFromString(responseBody)
+    }
+
+    override suspend fun createManagerWorkerInvite(
+        request: ManagerWorkerInviteCreatePayload,
+    ): ManagerWorkerInviteResponse {
+        val responseBody = execute(
+            method = "POST",
+            path = "/manager/worker-invites",
             requestBody = json.encodeToString(request),
         )
         return json.decodeFromString(responseBody)

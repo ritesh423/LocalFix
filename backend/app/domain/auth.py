@@ -28,6 +28,20 @@ class ResidentInvite:
 
 
 @dataclass(frozen=True)
+class StaffInvite:
+    id: UUID
+    property_id: UUID
+    user_id: UUID
+    role: UserRole
+    code_digest: str
+    expires_at: datetime
+    created_at: datetime
+    claimed_by_firebase_uid: str | None = None
+    claimed_at: datetime | None = None
+    revoked_at: datetime | None = None
+
+
+@dataclass(frozen=True)
 class PropertyMembership:
     id: UUID
     firebase_uid: str

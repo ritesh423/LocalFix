@@ -9,16 +9,16 @@ import kotlinx.serialization.Serializable
 interface AuthSessionApi {
     suspend fun getAuthSession(): AuthSession
 
-    suspend fun redeemResidentInvite(inviteCode: String): WorkspaceMembership
+    suspend fun redeemInvite(inviteCode: String): WorkspaceMembership
 }
 
 @Serializable
-data class ResidentInviteRedemptionPayload(
+data class InviteRedemptionPayload(
     @SerialName("invite_code") val inviteCode: String,
 )
 
 @Serializable
-data class ResidentInviteRedemptionResponse(
+data class InviteRedemptionResponse(
     val membership: WorkspaceMembershipResponse,
 )
 

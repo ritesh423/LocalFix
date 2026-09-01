@@ -104,6 +104,18 @@ class ManagerResidentInviteApiTest(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["detail"]["code"], "invalid_unit")
 
+    def test_manager_can_create_a_worker_invite(self) -> None:
+        response = self.client.post(
+            "/manager/worker-invites",
+            headers=self.headers(),
+            json={"name": "Dev Mehta", "specialty": "electrical"},
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["worker"]["name"], "Dev Mehta")
+        self.assertEqual(response.json()["worker"]["specialty"], "electrical")
+        self.assertTrue(response.json()["invite_code"].startswith("LFW-"))
+
     @staticmethod
     def headers() -> dict[str, str]:
         return {"Authorization": "Bearer manager-token"}

@@ -113,6 +113,64 @@ class ResidentInviteRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
+class PropertyWorkerRecord(Base):
+    __tablename__ = "property_workers"
+    __table_args__ = (
+        Index(
+            "ix_property_workers_property_active",
+            "property_id",
+            "is_active",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
+    property_id: Mapped[UUID] = mapped_column(
+        Uuid(),
+        ForeignKey("properties.id"),
+    )
+    name: Mapped[str] = mapped_column(String(120))
+    specialty: Mapped[str] = mapped_column(String(32))
+    is_active: Mapped[bool] = mapped_column(Boolean(), default=True)
+
+
+class StaffInviteRecord(Base):
+    __tablename__ = "staff_invites"
+    __table_args__ = (
+        Index(
+            "ix_staff_invites_property_role",
+            "property_id",
+            "role",
+        ),
+        UniqueConstraint(
+            "code_digest",
+            name="uq_staff_invites_code_digest",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
+    property_id: Mapped[UUID] = mapped_column(
+        Uuid(),
+        ForeignKey("properties.id"),
+    )
+    user_id: Mapped[UUID] = mapped_column(Uuid())
+    role: Mapped[str] = mapped_column(String(32))
+    code_digest: Mapped[str] = mapped_column(String(64))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    claimed_by_firebase_uid: Mapped[str | None] = mapped_column(
+        String(128),
+        nullable=True,
+    )
+    claimed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 class DeviceRegistrationRecord(Base):
     __tablename__ = "device_registrations"
     __table_args__ = (
