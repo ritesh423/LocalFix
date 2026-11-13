@@ -1,7 +1,7 @@
 from datetime import timedelta
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Response, status
 
 from app.api.dependencies import (
     ManagerContextDependency,
@@ -37,6 +37,22 @@ from app.services.tickets import (
 )
 
 router = APIRouter(prefix="/manager", tags=["manager"])
+
+
+@router.get("/tickets/{ticket_id}/issue-photo")
+def get_issue_photo(
+    ticket_id: UUID,
+    service: TicketServiceDependency,
+    manager: ManagerContextDependency,
+) -> Response:
+    evidence = service.get_issue_photo_for_manager(ticket_id, manager)
+    if evidence is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    return Response(
+        content=evidence.content,
+        media_type=evidence.content_type,
+        headers={"Cache-Control": "private, max-age=300"},
+    )
 
 
 @router.get("/units", response_model=list[ManagerPropertyUnitResponse])

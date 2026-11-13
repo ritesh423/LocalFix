@@ -572,6 +572,7 @@ private fun MaintenanceRequest.toDetailUiState(
         assignedWorker = assignedWorker,
         updatedLabel = updatedLabel,
         photoUri = photoUri,
+        issuePhotoUrl = issuePhotoUrl,
         completionNote = completionNote,
         partsUsed = partsUsed,
         completionPhotoUrl = completionPhotoUrl,

@@ -8,6 +8,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     String,
     UniqueConstraint,
     Uuid,
@@ -287,6 +288,7 @@ class TicketRecord(Base):
     completion_note: Mapped[str | None] = mapped_column(String(500), nullable=True)
     parts_used: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     completion_photo_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    issue_photo_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     completion_submitted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
@@ -324,4 +326,18 @@ class TicketEventRecord(Base):
     to_status: Mapped[str] = mapped_column(String(32))
     ticket_version: Mapped[int] = mapped_column(Integer)
     detail: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class EvidenceObjectRecord(Base):
+    __tablename__ = "evidence_objects"
+
+    key: Mapped[str] = mapped_column(String(255), primary_key=True)
+    ticket_id: Mapped[UUID] = mapped_column(
+        Uuid(),
+        ForeignKey("tickets.id"),
+        index=True,
+    )
+    content_type: Mapped[str] = mapped_column(String(32))
+    content: Mapped[bytes] = mapped_column(LargeBinary())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

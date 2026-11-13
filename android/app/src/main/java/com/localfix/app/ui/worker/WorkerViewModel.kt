@@ -352,6 +352,7 @@ private fun WorkerJob.toDetail() = WorkerJobDetail(
     partsUsed = partsUsed,
     hasCompletionPhoto = hasCompletionPhoto,
     reworkReason = reworkReason,
+    issuePhotoUrl = issuePhotoUrl,
 )
 
 private val WorkerJob.startStatusLabel: String

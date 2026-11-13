@@ -73,6 +73,7 @@ data class ManagerTicket(
     val updatedLabel: String,
     val commandDeliveryState: RequestDeliveryState = RequestDeliveryState.SYNCED,
     val commandFailureMessage: String? = null,
+    val issuePhotoUrl: String? = null,
 )
 
 data class ManagerWorker(

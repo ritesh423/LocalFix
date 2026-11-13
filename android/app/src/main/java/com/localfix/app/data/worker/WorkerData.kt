@@ -36,6 +36,7 @@ data class WorkerJob(
     val pendingCompletionNote: String? = null,
     val pendingPartsUsed: List<String> = emptyList(),
     val pendingPhotoUri: String? = null,
+    val issuePhotoUrl: String? = null,
 )
 
 data class WorkerJobEvent(

@@ -13,6 +13,7 @@ import com.localfix.app.data.local.PendingResidentReviewEntity
 import com.localfix.app.data.local.ResidentRequestStore
 import com.localfix.app.data.local.ResidentTicketEntity
 import com.localfix.app.data.remote.TicketApi
+import com.localfix.app.data.remote.TicketResponse
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -30,6 +31,7 @@ class ApiResidentRepository(
     applicationScope: CoroutineScope,
     private val pendingReviewSyncScheduler: PendingReviewSyncScheduler,
     private val clock: Clock = Clock.systemUTC(),
+    private val onTicketsRefreshed: (List<TicketResponse>) -> Unit = {},
 ) : ResidentRepository {
     private val mutableRequestSyncState =
         MutableStateFlow<RequestSyncState>(RequestSyncState.InitialLoading)
@@ -68,6 +70,7 @@ class ApiResidentRepository(
                     tickets = tickets.map { it.toResidentTicketEntity() },
                     acknowledgedClientRequestIds = tickets.map { it.clientRequestId },
                 )
+                runCatching { onTicketsRefreshed(tickets) }
                 mutableRequestSyncState.value = RequestSyncState.Ready
             }
             .onFailure {
@@ -174,6 +177,7 @@ private fun ResidentTicketEntity.toMaintenanceRequest(
         accessWindow = accessWindow,
         assignedWorker = assignedWorker ?: "Awaiting assignment",
         updatedLabel = updatedAt.toUpdatedLabel(clock),
+        issuePhotoUrl = if (hasIssuePhoto) ticketApi.issuePhotoUrl(id) else null,
         version = version,
         completionNote = completionNote,
         partsUsed = partsUsed,

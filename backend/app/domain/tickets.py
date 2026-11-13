@@ -91,6 +91,7 @@ class Ticket:
     resident_reviewed_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    issue_photo_key: str | None = None
 
 
 @dataclass(frozen=True)

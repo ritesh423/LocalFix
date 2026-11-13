@@ -87,4 +87,5 @@ data class WorkerJobDetail(
     val partsUsed: List<String>,
     val hasCompletionPhoto: Boolean,
     val reworkReason: String?,
+    val issuePhotoUrl: String? = null,
 )

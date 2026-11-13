@@ -254,6 +254,34 @@ class SqlAlchemyMembershipRepositoryTest(unittest.TestCase):
 
 
 class FirebaseIdentityTokenVerifierTest(unittest.TestCase):
+    @patch("app.gateways.identity.firebase_admin.initialize_app")
+    @patch("app.gateways.identity.credentials.Certificate")
+    @patch("app.gateways.identity.firebase_admin.get_app")
+    def test_cloud_secret_json_initializes_firebase_without_a_local_file(
+        self,
+        get_app,
+        certificate,
+        initialize_app,
+    ) -> None:
+        get_app.side_effect = ValueError
+        firebase_credential = object()
+        certificate.return_value = firebase_credential
+
+        FirebaseIdentityTokenVerifier(
+            project_id="localfix-be333",
+            credentials_json=(
+                '{"type":"service_account","project_id":"localfix-be333"}'
+            ),
+        )
+
+        certificate.assert_called_once_with(
+            {"type": "service_account", "project_id": "localfix-be333"}
+        )
+        initialize_app.assert_called_once_with(
+            credential=firebase_credential,
+            options={"projectId": "localfix-be333"},
+        )
+
     @patch("app.gateways.identity.auth.verify_id_token")
     @patch("app.gateways.identity.firebase_admin.get_app")
     def test_firebase_claims_become_a_small_trusted_identity(

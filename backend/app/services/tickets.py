@@ -3,6 +3,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
+from app.domain.notifications import NotificationJob
 from app.domain.ticket_workflow import (
     TicketAction,
     TicketStatus,
@@ -106,6 +107,10 @@ class InvalidCompletionEvidenceError(ValueError):
     pass
 
 
+class InvalidIssuePhotoError(ValueError):
+    pass
+
+
 class InvalidResidentReviewError(ValueError):
     pass
 
@@ -117,12 +122,21 @@ class TicketService:
         workers: Iterable[Worker] = (),
         evidence_storage: EvidenceStorage | None = None,
         worker_repository: WorkerRepository | None = None,
+        enable_push_notifications: bool = True,
     ) -> None:
         self._repository = repository
         self._workers = {worker.id: worker for worker in workers}
         self._evidence_storage = evidence_storage
         self._worker_repository = worker_repository
         self._notification_planner = TicketNotificationPlanner()
+        self._enable_push_notifications = enable_push_notifications
+
+    def _notification_jobs(
+        self, ticket: Ticket, event: TicketEvent
+    ) -> tuple[NotificationJob, ...]:
+        if not self._enable_push_notifications:
+            return ()
+        return self._notification_planner.plan(ticket, event)
 
     def create_ticket(
         self,
@@ -168,7 +182,7 @@ class TicketService:
         ticket, was_created = self._repository.create(
             candidate,
             event,
-            self._notification_planner.plan(candidate, event),
+            self._notification_jobs(candidate, event),
         )
         return CreateTicketResult(ticket=ticket, was_created=was_created)
 
@@ -302,7 +316,7 @@ class TicketService:
             started_ticket,
             expected_version=command.expected_version,
             event=event,
-            notification_jobs=self._notification_planner.plan(
+            notification_jobs=self._notification_jobs(
                 started_ticket,
                 event,
             ),
@@ -368,7 +382,7 @@ class TicketService:
                 completed_ticket,
                 expected_version=command.expected_version,
                 event=event,
-                notification_jobs=self._notification_planner.plan(
+                notification_jobs=self._notification_jobs(
                     completed_ticket,
                     event,
                 ),
@@ -401,6 +415,58 @@ class TicketService:
         if self._evidence_storage is None:
             raise RuntimeError("Completion evidence storage is not configured.")
         return self._evidence_storage.read(ticket.completion_photo_key)
+
+    def upload_issue_photo(
+        self,
+        ticket_id: UUID,
+        photo: CompletionPhoto,
+        resident: ResidentContext,
+    ) -> Ticket:
+        ticket = self.get_ticket(ticket_id, resident)
+        if ticket is None:
+            raise TicketNotFoundError
+        if ticket.issue_photo_key is not None:
+            return ticket
+        self._validate_photo(photo, label="Issue")
+        if self._evidence_storage is None:
+            raise RuntimeError("Issue photo storage is not configured.")
+        key = self._evidence_storage.save(ticket_id, photo.content_type, photo.content)
+        try:
+            attached = self._repository.attach_issue_photo_if_absent(ticket_id, key)
+        except Exception:
+            self._evidence_storage.delete(key)
+            raise
+        if not attached:
+            self._evidence_storage.delete(key)
+        return self.get_ticket(ticket_id, resident) or ticket
+
+    def get_issue_photo_for_resident(
+        self, ticket_id: UUID, resident: ResidentContext
+    ) -> StoredEvidence | None:
+        return self._read_issue_photo(self.get_ticket(ticket_id, resident))
+
+    def get_issue_photo_for_manager(
+        self, ticket_id: UUID, manager: ManagerContext
+    ) -> StoredEvidence | None:
+        return self._read_issue_photo(
+            self._repository.get_for_property(ticket_id, manager.property_id)
+        )
+
+    def get_issue_photo_for_worker(
+        self, ticket_id: UUID, worker: WorkerContext
+    ) -> StoredEvidence | None:
+        return self._read_issue_photo(
+            self._repository.get_for_worker(
+                ticket_id, worker.property_id, worker.worker_id
+            )
+        )
+
+    def _read_issue_photo(self, ticket: Ticket | None) -> StoredEvidence | None:
+        if ticket is None or ticket.issue_photo_key is None:
+            return None
+        if self._evidence_storage is None:
+            raise RuntimeError("Issue photo storage is not configured.")
+        return self._evidence_storage.read(ticket.issue_photo_key)
 
     def review_ticket(
         self,
@@ -463,7 +529,7 @@ class TicketService:
             reviewed_ticket,
             expected_version=command.expected_version,
             event=event,
-            notification_jobs=self._notification_planner.plan(
+            notification_jobs=self._notification_jobs(
                 reviewed_ticket,
                 event,
             ),
@@ -486,6 +552,10 @@ class TicketService:
             raise InvalidCompletionEvidenceError(
                 "Use at most 10 parts with no more than 80 characters each."
             )
+        TicketService._validate_photo(photo, label="Completion")
+
+    @staticmethod
+    def _validate_photo(photo: CompletionPhoto, label: str) -> None:
         if photo.content_type not in {
             "image/jpeg",
             "image/png",
@@ -493,12 +563,18 @@ class TicketService:
             "image/heic",
             "image/heif",
         }:
-            raise InvalidCompletionEvidenceError(
-                "Completion photo must be JPEG, PNG, WebP, HEIC, or HEIF."
+            error = f"{label} photo must be JPEG, PNG, WebP, HEIC, or HEIF."
+            raise (
+                InvalidIssuePhotoError(error)
+                if label == "Issue"
+                else InvalidCompletionEvidenceError(error)
             )
         if not photo.content or len(photo.content) > 5 * 1024 * 1024:
-            raise InvalidCompletionEvidenceError(
-                "Completion photo must be present and no larger than 5 MB."
+            error = f"{label} photo must be present and no larger than 5 MB."
+            raise (
+                InvalidIssuePhotoError(error)
+                if label == "Issue"
+                else InvalidCompletionEvidenceError(error)
             )
 
     def assign_ticket(
@@ -556,7 +632,7 @@ class TicketService:
             assigned_ticket,
             expected_version=command.expected_version,
             event=event,
-            notification_jobs=self._notification_planner.plan(
+            notification_jobs=self._notification_jobs(
                 assigned_ticket,
                 event,
             ),

@@ -251,6 +251,7 @@ class TicketResponse(BaseModel):
     assigned_worker: str | None
     completion_note: str | None
     parts_used: list[str]
+    has_issue_photo: bool
     has_completion_photo: bool
     completion_submitted_at: datetime | None
     resident_rating: int | None
@@ -279,6 +280,7 @@ class TicketResponse(BaseModel):
             assigned_worker=ticket.assigned_worker,
             completion_note=ticket.completion_note,
             parts_used=list(ticket.parts_used),
+            has_issue_photo=ticket.issue_photo_key is not None,
             has_completion_photo=ticket.completion_photo_key is not None,
             completion_submitted_at=ticket.completion_submitted_at,
             resident_rating=ticket.resident_rating,

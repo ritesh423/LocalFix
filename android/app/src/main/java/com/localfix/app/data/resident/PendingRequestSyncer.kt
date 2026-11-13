@@ -9,16 +9,21 @@ import java.io.IOException
 class PendingRequestSyncer(
     private val ticketApi: TicketApi,
     private val residentRequestStore: ResidentRequestStore,
+    private val onPhotoReleased: (String) -> Unit = {},
 ) {
     suspend fun sync(clientRequestId: String): PendingRequestSyncResult {
         val pendingRequest = residentRequestStore.getPendingRequest(clientRequestId)
             ?: return PendingRequestSyncResult.SUCCESS
         return try {
             val createdTicket = ticketApi.createTicket(pendingRequest.toPayload())
+            val syncedTicket = pendingRequest.photoUri?.let { photoUri ->
+                ticketApi.uploadIssuePhoto(createdTicket.id, photoUri)
+            } ?: createdTicket
             residentRequestStore.completePendingRequest(
                 clientRequestId = clientRequestId,
-                ticket = createdTicket.toResidentTicketEntity(),
+                ticket = syncedTicket.toResidentTicketEntity(),
             )
+            pendingRequest.photoUri?.let { runCatching { onPhotoReleased(it) } }
             PendingRequestSyncResult.SUCCESS
         } catch (_: IOException) {
             PendingRequestSyncResult.RETRY

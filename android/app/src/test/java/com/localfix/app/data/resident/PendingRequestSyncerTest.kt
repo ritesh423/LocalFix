@@ -33,6 +33,7 @@ class PendingRequestSyncerTest {
 
         assertEquals(PendingRequestSyncResult.SUCCESS, result)
         assertEquals(CLIENT_REQUEST_ID, api.lastCreatePayload?.clientRequestId)
+        assertEquals("content://localfix/photo/kitchen-tap", api.lastUploadedPhotoUri)
         assertNull(store.getPendingRequest(CLIENT_REQUEST_ID))
         assertEquals("Kitchen tap is leaking", store.tickets.value.single().title)
     }
@@ -69,6 +70,18 @@ class PendingRequestSyncerTest {
         val failed = store.getPendingRequest(CLIENT_REQUEST_ID)
         assertEquals(RequestDeliveryState.FAILED, failed?.deliveryState)
         assertTrue(failed?.failureMessage?.isNotBlank() == true)
+    }
+
+    @Test
+    fun photoUploadFailureKeepsTheRequestPendingForRetry() = runTest {
+        val store = FakeResidentRequestStore(pendingRequest())
+        val api = FakeTicketApi(uploadFailure = IOException("offline"))
+
+        val result = PendingRequestSyncer(api, store).sync(CLIENT_REQUEST_ID)
+
+        assertEquals(PendingRequestSyncResult.RETRY, result)
+        assertEquals(RequestDeliveryState.PENDING, store.getPendingRequest(CLIENT_REQUEST_ID)?.deliveryState)
+        assertTrue(store.tickets.value.isEmpty())
     }
 
     private fun pendingRequest() = PendingResidentRequestEntity(
@@ -182,13 +195,21 @@ class PendingRequestSyncerTest {
 
     private class FakeTicketApi(
         private val createFailure: Throwable? = null,
+        private val uploadFailure: Throwable? = null,
     ) : TicketApi {
         var lastCreatePayload: TicketCreatePayload? = null
+        var lastUploadedPhotoUri: String? = null
 
         override suspend fun createTicket(request: TicketCreatePayload): TicketResponse {
             createFailure?.let { throw it }
             lastCreatePayload = request
             return ticketResponse(request)
+        }
+
+        override suspend fun uploadIssuePhoto(ticketId: String, photoUri: String): TicketResponse {
+            uploadFailure?.let { throw it }
+            lastUploadedPhotoUri = photoUri
+            return ticketResponse(requireNotNull(lastCreatePayload)).copy(hasIssuePhoto = true)
         }
 
         override suspend fun listTickets(): List<TicketResponse> = emptyList()

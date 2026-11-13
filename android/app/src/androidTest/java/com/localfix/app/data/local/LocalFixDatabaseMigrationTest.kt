@@ -262,4 +262,24 @@ class LocalFixDatabaseMigrationTest {
             assertTrue(cursor.isNull(3))
         }
     }
+
+    @Test
+    fun migrationFromEightToNineAddsIssuePhotoFlag() {
+        val databaseName = "localfix-migration-eight-nine-test.db"
+        migrationHelper.createDatabase(databaseName, 8).close()
+
+        val migratedDatabase = migrationHelper.runMigrationsAndValidate(
+            databaseName,
+            9,
+            true,
+            MIGRATION_8_9,
+        )
+
+        migratedDatabase.query("PRAGMA table_info(resident_tickets)").use { cursor ->
+            val nameColumn = cursor.getColumnIndexOrThrow("name")
+            val names = mutableListOf<String>()
+            while (cursor.moveToNext()) names += cursor.getString(nameColumn)
+            assertTrue(names.contains("hasIssuePhoto"))
+        }
+    }
 }

@@ -5,7 +5,11 @@ import time
 
 from dotenv import load_dotenv
 
-from app.database.config import get_database_url
+from app.database.config import (
+    get_database_url,
+    get_firebase_credentials_json,
+    get_firebase_project_id,
+)
 from app.database.session import create_database_engine, create_session_factory
 from app.gateways.push import FirebasePushGateway
 from app.repositories.sqlalchemy_device_registrations import (
@@ -26,7 +30,8 @@ def deliver_once() -> None:
         outbox=SqlAlchemyNotificationOutboxRepository(session_factory),
         device_registrations=SqlAlchemyDeviceRegistrationRepository(session_factory),
         push_gateway=FirebasePushGateway(
-            project_id=os.getenv("LOCALFIX_FIREBASE_PROJECT_ID")
+            project_id=get_firebase_project_id(),
+            credentials_json=get_firebase_credentials_json(),
         ),
     )
     try:

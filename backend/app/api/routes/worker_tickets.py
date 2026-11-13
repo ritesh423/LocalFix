@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile, status
 
 from app.api.dependencies import TicketServiceDependency, WorkerContextDependency
 from app.api.schemas import TicketEventResponse, TicketResponse, TicketStartRequest
@@ -15,6 +15,22 @@ from app.services.tickets import (
 )
 
 router = APIRouter(prefix="/worker", tags=["worker"])
+
+
+@router.get("/tickets/{ticket_id}/issue-photo")
+def get_issue_photo(
+    ticket_id: UUID,
+    service: TicketServiceDependency,
+    worker: WorkerContextDependency,
+) -> Response:
+    evidence = service.get_issue_photo_for_worker(ticket_id, worker)
+    if evidence is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    return Response(
+        content=evidence.content,
+        media_type=evidence.content_type,
+        headers={"Cache-Control": "private, max-age=300"},
+    )
 
 
 @router.get("/tickets", response_model=list[TicketResponse])

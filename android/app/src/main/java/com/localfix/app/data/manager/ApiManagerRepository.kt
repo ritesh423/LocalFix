@@ -36,6 +36,7 @@ class ApiManagerRepository(
     private val commandSyncScheduler: TicketCommandSyncScheduler,
     applicationScope: CoroutineScope,
     private val clock: Clock = Clock.systemUTC(),
+    private val onTicketsRefreshed: (List<TicketResponse>) -> Unit = {},
 ) : ManagerRepository {
     private val serverData = MutableStateFlow(emptyManagerData())
     private val mutableSyncState =
@@ -70,6 +71,9 @@ class ApiManagerRepository(
                         ticket.toManagerTicket(
                             clock = clock,
                             unitLabel = unitsById[ticket.unitId]?.label,
+                            issuePhotoUrl = if (ticket.hasIssuePhoto) {
+                                ticketApi.managerIssuePhotoUrl(ticket.id)
+                            } else null,
                         )
                     },
                     workers = response.workers.map(WorkerResponse::toManagerWorker),
@@ -77,6 +81,7 @@ class ApiManagerRepository(
                     units = response.units.map(ManagerPropertyUnitResponse::toDomain),
                 )
             }
+            runCatching { onTicketsRefreshed(response.tickets) }
             hasLoaded = true
             mutableSyncState.value = ManagerSyncState.Ready
         }.onFailure {
@@ -154,7 +159,12 @@ class ApiManagerRepository(
     }
 
     fun acceptSyncedTicket(ticket: TicketResponse) {
-        val assigned = ticket.toManagerTicket(clock)
+        val assigned = ticket.toManagerTicket(
+            clock,
+            issuePhotoUrl = if (ticket.hasIssuePhoto) {
+                ticketApi.managerIssuePhotoUrl(ticket.id)
+            } else null,
+        )
         serverData.update { data ->
             val previous = data.tickets.find { it.id == assigned.id }
             data.copy(
@@ -221,6 +231,7 @@ private fun ManagerData.withPendingAssignments(
 private fun TicketResponse.toManagerTicket(
     clock: Clock,
     unitLabel: String? = null,
+    issuePhotoUrl: String? = null,
 ): ManagerTicket = ManagerTicket(
     id = id,
     reference = if (id.startsWith("LF-")) id else "LF-${id.take(8).uppercase()}",
@@ -236,6 +247,7 @@ private fun TicketResponse.toManagerTicket(
     assignedWorkerId = assignedWorkerId,
     assignedWorker = assignedWorker,
     updatedLabel = updatedAt.toUpdatedLabel(clock),
+    issuePhotoUrl = issuePhotoUrl,
 )
 
 private fun WorkerResponse.toManagerWorker(): ManagerWorker = ManagerWorker(

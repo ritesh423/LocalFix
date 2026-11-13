@@ -30,6 +30,7 @@ class ApiWorkerRepository(
     private val commandSyncScheduler: TicketCommandSyncScheduler,
     applicationScope: CoroutineScope,
     private val clock: Clock = Clock.systemUTC(),
+    private val onTicketsRefreshed: (List<TicketResponse>) -> Unit = {},
 ) : WorkerRepository {
     private val serverData = MutableStateFlow(emptyWorkerData())
     private val mutableSyncState =
@@ -52,8 +53,16 @@ class ApiWorkerRepository(
         runCatching { ticketApi.listWorkerTickets() }
             .onSuccess { tickets ->
                 serverData.update { data ->
-                    data.copy(jobs = tickets.map { it.toWorkerJob(clock) })
+                    data.copy(jobs = tickets.map { ticket ->
+                        ticket.toWorkerJob(
+                            clock,
+                            issuePhotoUrl = if (ticket.hasIssuePhoto) {
+                                ticketApi.workerIssuePhotoUrl(ticket.id)
+                            } else null,
+                        )
+                    })
                 }
+                runCatching { onTicketsRefreshed(tickets) }
                 hasLoaded = true
                 mutableSyncState.value = WorkerSyncState.Ready
             }
@@ -102,7 +111,12 @@ class ApiWorkerRepository(
     }
 
     fun acceptSyncedTicket(ticket: TicketResponse) {
-        val started = ticket.toWorkerJob(clock)
+        val started = ticket.toWorkerJob(
+            clock,
+            issuePhotoUrl = if (ticket.hasIssuePhoto) {
+                ticketApi.workerIssuePhotoUrl(ticket.id)
+            } else null,
+        )
         serverData.update { data ->
             data.copy(
                 jobs = data.jobs.map { existing ->
@@ -191,7 +205,10 @@ private fun WorkerData.withPendingCommands(
     })
 }
 
-private fun TicketResponse.toWorkerJob(clock: Clock): WorkerJob = WorkerJob(
+private fun TicketResponse.toWorkerJob(
+    clock: Clock,
+    issuePhotoUrl: String? = null,
+): WorkerJob = WorkerJob(
     id = id,
     reference = if (id.startsWith("LF-")) id else "LF-${id.take(8).uppercase()}",
     unitLabel = unitId.toUnitLabel(),
@@ -208,6 +225,7 @@ private fun TicketResponse.toWorkerJob(clock: Clock): WorkerJob = WorkerJob(
     hasCompletionPhoto = hasCompletionPhoto,
     reworkReason = residentFeedback,
     updatedLabel = updatedAt.toUpdatedLabel(clock),
+    issuePhotoUrl = issuePhotoUrl,
 )
 
 private fun TicketEventResponse.toWorkerJobEvent(clock: Clock) = WorkerJobEvent(

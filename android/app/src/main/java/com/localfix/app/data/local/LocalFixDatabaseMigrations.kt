@@ -109,3 +109,9 @@ val MIGRATION_7_8 = Migration(7, 8) { database ->
         "ALTER TABLE pending_ticket_commands ADD COLUMN photoUri TEXT",
     )
 }
+
+val MIGRATION_8_9 = Migration(8, 9) { database ->
+    database.execSQL(
+        "ALTER TABLE resident_tickets ADD COLUMN hasIssuePhoto INTEGER NOT NULL DEFAULT 0",
+    )
+}

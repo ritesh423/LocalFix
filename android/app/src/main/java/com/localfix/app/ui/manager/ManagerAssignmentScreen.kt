@@ -39,6 +39,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.localfix.app.data.manager.ManagerPriority
 import com.localfix.app.data.model.ServiceCategory
+import com.localfix.app.ui.components.AuthenticatedPhoto
 import com.localfix.app.ui.theme.LocalFixRadius
 import com.localfix.app.ui.theme.LocalFixSpacing
 import com.localfix.app.ui.theme.LocalFixTheme
@@ -80,6 +81,16 @@ fun ManagerAssignmentScreen(
                 )
                 Spacer(modifier = Modifier.height(LocalFixSpacing.extraSmall))
                 Text(text = ticket.description, style = MaterialTheme.typography.bodyLarge)
+                ticket.issuePhotoUrl?.let { url ->
+                    Spacer(modifier = Modifier.height(LocalFixSpacing.medium))
+                    AuthenticatedPhoto(
+                        url = url,
+                        contentDescription = "Resident issue photo for ${ticket.title}",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(220.dp),
+                    )
+                }
             }
         }
         item {

@@ -1,9 +1,8 @@
-from pathlib import Path
-
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
 from app.api.routes.auth import router as auth_router
 from app.api.routes.device_registrations import router as device_registrations_router
@@ -12,9 +11,10 @@ from app.api.routes.tickets import router as tickets_router
 from app.api.routes.worker_tickets import router as worker_tickets_router
 from app.database.config import (
     get_database_url,
-    get_evidence_directory,
+    get_firebase_credentials_json,
     get_firebase_project_id,
     is_authentication_required,
+    validate_production_configuration,
 )
 from app.database.session import create_database_engine, create_session_factory
 from app.demo import DEMO_WORKERS
@@ -56,7 +56,7 @@ from app.repositories.staff_invites import (
 )
 from app.repositories.tickets import InMemoryTicketRepository, TicketRepository
 from app.repositories.workers import InMemoryWorkerRepository, WorkerRepository
-from app.storage.evidence import EvidenceStorage, LocalEvidenceStorage
+from app.storage.evidence import EvidenceStorage, create_configured_evidence_storage
 
 
 def create_app(
@@ -72,9 +72,10 @@ def create_app(
     identity_token_verifier: IdentityTokenVerifier | None = None,
     authentication_required: bool = False,
 ) -> FastAPI:
+    validate_production_configuration()
     application = FastAPI(
         title="LocalFix API",
-        version="0.14.0",
+        version="0.15.0",
         description="Apartment maintenance workflow API.",
     )
     session_factory = None
@@ -143,11 +144,14 @@ def create_app(
     application.state.worker_repository = worker_repository
     application.state.identity_token_verifier = (
         identity_token_verifier
-        or FirebaseIdentityTokenVerifier(project_id=get_firebase_project_id())
+        or FirebaseIdentityTokenVerifier(
+            project_id=get_firebase_project_id(),
+            credentials_json=get_firebase_credentials_json(),
+        )
     )
     application.state.authentication_required = authentication_required
-    application.state.evidence_storage = evidence_storage or LocalEvidenceStorage(
-        Path(get_evidence_directory())
+    application.state.evidence_storage = (
+        evidence_storage or create_configured_evidence_storage(session_factory)
     )
     application.include_router(auth_router)
     application.include_router(tickets_router)
@@ -181,6 +185,33 @@ def create_app(
     @application.get("/health", tags=["system"])
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @application.get("/health/ready", tags=["system"])
+    def readiness() -> dict[str, str]:
+        engine = getattr(application.state, "database_engine", None)
+        if engine is not None:
+            try:
+                with engine.connect() as connection:
+                    connection.execute(text("SELECT 1"))
+            except Exception as error:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail={
+                        "code": "database_unavailable",
+                        "message": "The database is not ready.",
+                    },
+                ) from error
+        try:
+            application.state.evidence_storage.check_ready()
+        except Exception as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={
+                    "code": "evidence_storage_unavailable",
+                    "message": "Completion photo storage is not ready.",
+                },
+            ) from error
+        return {"status": "ready"}
 
     return application
 

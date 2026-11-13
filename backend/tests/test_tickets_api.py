@@ -1,4 +1,6 @@
+import os
 import unittest
+from unittest.mock import patch
 from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
@@ -39,6 +41,12 @@ class TicketsApiTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"status": "ok"})
+
+    def test_readiness_reports_that_dependencies_are_available(self) -> None:
+        response = self.client.get("/health/ready")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"status": "ready"})
 
     def test_resident_device_is_registered_to_the_server_context(self) -> None:
         installation_id = uuid4()
@@ -111,6 +119,48 @@ class TicketsApiTest(unittest.TestCase):
         self.assertEqual(retry_response.json()["id"], first_response.json()["id"])
         self.assertEqual(len(list_response.json()), 1)
         self.assertEqual(len(self.repository.notification_jobs), 1)
+
+    def test_personal_hosting_does_not_queue_unused_push_notifications(self) -> None:
+        with patch.dict(os.environ, {"LOCALFIX_ENV": "personal"}):
+            response = self.client.post("/tickets", json=self.ticket_payload())
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(self.repository.notification_jobs, [])
+
+    def test_issue_photo_is_uploaded_once_and_visible_to_the_manager(self) -> None:
+        ticket = self.client.post("/tickets", json=self.ticket_payload()).json()
+        path = f"/tickets/{ticket['id']}/issue-photo"
+
+        uploaded = self.client.post(
+            path,
+            files={"photo": ("leak.jpg", b"photo-bytes", "image/jpeg")},
+        )
+        repeated = self.client.post(
+            path,
+            files={"photo": ("different.jpg", b"different", "image/jpeg")},
+        )
+
+        self.assertEqual(uploaded.status_code, 200)
+        self.assertTrue(uploaded.json()["has_issue_photo"])
+        self.assertEqual(repeated.status_code, 200)
+        self.assertEqual(repeated.json()["version"], ticket["version"])
+        self.assertEqual(self.client.get(path).content, b"photo-bytes")
+        self.assertEqual(
+            self.client.get(f"/manager/tickets/{ticket['id']}/issue-photo").content,
+            b"photo-bytes",
+        )
+        self.assertEqual(len(self.evidence_storage.content_by_key), 1)
+
+    def test_issue_photo_rejects_unsupported_file_type(self) -> None:
+        ticket = self.client.post("/tickets", json=self.ticket_payload()).json()
+
+        response = self.client.post(
+            f"/tickets/{ticket['id']}/issue-photo",
+            files={"photo": ("notes.txt", b"hello", "text/plain")},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(self.client.get(f"/tickets/{ticket['id']}").json()["has_issue_photo"])
 
     def test_workflow_notifications_target_the_person_who_needs_to_act(self) -> None:
         completed = self.create_completed_ticket()
@@ -596,15 +646,9 @@ class TicketsApiTest(unittest.TestCase):
             },
         ).json()
 
-        resident_history = self.client.get(
-            f"/tickets/{completed['id']}/events"
-        )
-        manager_history = self.client.get(
-            f"/manager/tickets/{completed['id']}/events"
-        )
-        worker_history = self.client.get(
-            f"/worker/tickets/{completed['id']}/events"
-        )
+        resident_history = self.client.get(f"/tickets/{completed['id']}/events")
+        manager_history = self.client.get(f"/manager/tickets/{completed['id']}/events")
+        worker_history = self.client.get(f"/worker/tickets/{completed['id']}/events")
 
         self.assertEqual(resident_history.status_code, 200)
         self.assertEqual(manager_history.json(), resident_history.json())
@@ -625,7 +669,9 @@ class TicketsApiTest(unittest.TestCase):
         self.assertEqual(worker_ticket["resident_feedback"], reason)
         self.assertEqual(reviewed["version"], 5)
 
-    def test_resident_review_validates_decision_fields_and_current_version(self) -> None:
+    def test_resident_review_validates_decision_fields_and_current_version(
+        self,
+    ) -> None:
         completed = self.create_completed_ticket()
         review_url = f"/tickets/{completed['id']}/review"
 

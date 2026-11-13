@@ -373,6 +373,7 @@ private fun ManagerTicket.toAssignmentTicket() = ManagerAssignmentTicket(
     canBeAssigned = status == TicketStatus.OPEN &&
         commandDeliveryState != RequestDeliveryState.PENDING,
     version = version,
+    issuePhotoUrl = issuePhotoUrl,
 )
 
 private val TicketStatus.label: String

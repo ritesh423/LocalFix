@@ -8,6 +8,7 @@ import com.localfix.app.data.auth.AuthRepository
 import com.localfix.app.data.auth.AuthTokenProvider
 import com.localfix.app.data.auth.FirebaseAuthRepository
 import com.localfix.app.R
+import com.localfix.app.BuildConfig
 import com.localfix.app.data.command.RoomTicketCommandStore
 import com.localfix.app.data.command.TicketCommandSyncer
 import com.localfix.app.data.command.WorkManagerTicketCommandSyncScheduler
@@ -21,6 +22,7 @@ import com.localfix.app.data.local.MIGRATION_4_5
 import com.localfix.app.data.local.MIGRATION_5_6
 import com.localfix.app.data.local.MIGRATION_6_7
 import com.localfix.app.data.local.MIGRATION_7_8
+import com.localfix.app.data.local.MIGRATION_8_9
 import com.localfix.app.data.local.RoomResidentRequestStore
 import com.localfix.app.data.manager.ApiManagerRepository
 import com.localfix.app.data.manager.ManagerRepository
@@ -37,6 +39,7 @@ import com.localfix.app.data.resident.WorkManagerPendingRequestSyncScheduler
 import com.localfix.app.data.resident.ResidentRepository
 import com.localfix.app.data.worker.ApiWorkerRepository
 import com.localfix.app.data.worker.WorkerRepository
+import com.localfix.app.notifications.LocalTicketChangeNotifier
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -70,15 +73,21 @@ class DefaultAppContainer(context: Context) : AppContainer {
         MIGRATION_5_6,
         MIGRATION_6_7,
         MIGRATION_7_8,
+        MIGRATION_8_9,
     )
         .build()
 
     override val authRepository: AuthRepository? = runCatching {
         FirebaseAuthRepository()
     }.getOrNull()
+    private val localTicketChangeNotifier = LocalTicketChangeNotifier(
+        context.applicationContext,
+    ) { authRepository?.currentUser?.firebaseUid }
 
     private val ticketApi = HttpTicketApi(
-        baseUrl = context.getString(R.string.api_base_url),
+        baseUrl = BuildConfig.API_BASE_URL.ifBlank {
+            context.getString(R.string.api_base_url)
+        },
         contentResolver = context.contentResolver,
         authTokenProvider = authRepository ?: AuthTokenProvider { null },
     )
@@ -109,6 +118,14 @@ class DefaultAppContainer(context: Context) : AppContainer {
     val pendingRequestSyncer = PendingRequestSyncer(
         ticketApi = ticketApi,
         residentRequestStore = residentRequestStore,
+        onPhotoReleased = { photoUri ->
+            runCatching {
+                context.contentResolver.releasePersistableUriPermission(
+                    Uri.parse(photoUri),
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            }
+        },
     )
     val pendingReviewSyncer = PendingReviewSyncer(
         ticketApi = ticketApi,
@@ -121,18 +138,21 @@ class DefaultAppContainer(context: Context) : AppContainer {
         pendingRequestSyncScheduler = pendingRequestSyncScheduler,
         pendingReviewSyncScheduler = pendingReviewSyncScheduler,
         applicationScope = applicationScope,
+        onTicketsRefreshed = localTicketChangeNotifier::onResidentTickets,
     )
     private val apiManagerRepository = ApiManagerRepository(
         ticketApi = ticketApi,
         commandStore = ticketCommandStore,
         commandSyncScheduler = ticketCommandSyncScheduler,
         applicationScope = applicationScope,
+        onTicketsRefreshed = localTicketChangeNotifier::onManagerTickets,
     )
     private val apiWorkerRepository = ApiWorkerRepository(
         ticketApi = ticketApi,
         commandStore = ticketCommandStore,
         commandSyncScheduler = ticketCommandSyncScheduler,
         applicationScope = applicationScope,
+        onTicketsRefreshed = localTicketChangeNotifier::onWorkerTickets,
     )
     val ticketCommandSyncer = TicketCommandSyncer(
         managerApi = ticketApi,

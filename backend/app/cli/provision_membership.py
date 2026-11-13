@@ -4,7 +4,11 @@ from uuid import UUID
 
 from dotenv import load_dotenv
 
-from app.database.config import get_database_url, get_firebase_project_id
+from app.database.config import (
+    get_database_url,
+    get_firebase_credentials_json,
+    get_firebase_project_id,
+)
 from app.database.session import create_database_engine, create_session_factory
 from app.domain.ticket_workflow import UserRole
 from app.gateways.identity import FirebaseIdentityDirectory
@@ -43,7 +47,8 @@ def main(arguments: list[str] | None = None) -> int:
     engine = create_database_engine(get_database_url())
     try:
         identity = FirebaseIdentityDirectory(
-            project_id=get_firebase_project_id()
+            project_id=get_firebase_project_id(),
+            credentials_json=get_firebase_credentials_json(),
         ).find_by_email(parsed.email)
         if identity is None:
             print(

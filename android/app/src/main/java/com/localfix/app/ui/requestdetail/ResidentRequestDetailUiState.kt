@@ -25,6 +25,7 @@ data class ResidentRequestDetailUiState(
     val delivery: RequestDeliveryUiState?,
     val reviewDelivery: ReviewDeliveryUiState? = null,
     val review: ResidentReviewUiState,
+    val issuePhotoUrl: String? = null,
 )
 
 data class RequestDeliveryUiState(

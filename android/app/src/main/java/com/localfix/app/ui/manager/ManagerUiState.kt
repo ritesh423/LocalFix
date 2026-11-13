@@ -71,6 +71,7 @@ data class ManagerAssignmentTicket(
     val assignedWorker: String?,
     val canBeAssigned: Boolean,
     val version: Int,
+    val issuePhotoUrl: String? = null,
 )
 
 data class ManagerWorkerItem(

@@ -76,6 +76,7 @@ internal fun TicketResponse.toResidentTicketEntity(): ResidentTicketEntity = Res
     completionNote = completionNote,
     partsUsed = partsUsed,
     hasCompletionPhoto = hasCompletionPhoto,
+    hasIssuePhoto = hasIssuePhoto,
     residentRating = residentRating,
     residentFeedback = residentFeedback,
     createdAt = createdAt,

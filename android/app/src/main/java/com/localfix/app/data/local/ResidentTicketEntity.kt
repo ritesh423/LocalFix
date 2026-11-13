@@ -1,6 +1,7 @@
 package com.localfix.app.data.local
 
 import androidx.room.Entity
+import androidx.room.ColumnInfo
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.localfix.app.data.model.AccessWindow
@@ -28,6 +29,7 @@ data class ResidentTicketEntity(
     val completionNote: String?,
     val partsUsed: List<String>,
     val hasCompletionPhoto: Boolean,
+    @ColumnInfo(defaultValue = "0") val hasIssuePhoto: Boolean = false,
     val residentRating: Int?,
     val residentFeedback: String?,
     val createdAt: String,

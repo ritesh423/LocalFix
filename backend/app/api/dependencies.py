@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from app.database.config import get_environment
 from app.demo import (
     DEMO_MANAGER_CONTEXT,
     DEMO_RESIDENT_CONTEXT,
@@ -50,6 +51,7 @@ def get_ticket_service(
         workers=DEMO_WORKERS,
         evidence_storage=evidence_storage,
         worker_repository=workers,
+        enable_push_notifications=get_environment() != "personal",
     )
 
 

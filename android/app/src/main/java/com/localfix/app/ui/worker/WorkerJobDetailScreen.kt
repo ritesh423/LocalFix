@@ -54,6 +54,7 @@ import com.localfix.app.ui.components.RequestStatusBadge
 import com.localfix.app.ui.components.persistPhotoAccess
 import com.localfix.app.ui.components.releasePhotoAccess
 import com.localfix.app.data.model.RequestDeliveryState
+import com.localfix.app.ui.components.AuthenticatedPhoto
 import com.localfix.app.ui.requests.RequestStatusTone
 import com.localfix.app.ui.theme.LocalFixRadius
 import com.localfix.app.ui.theme.LocalFixSpacing
@@ -123,6 +124,16 @@ fun WorkerJobDetailScreen(
                 )
                 Spacer(modifier = Modifier.height(LocalFixSpacing.extraSmall))
                 Text(text = job.description, style = MaterialTheme.typography.bodyLarge)
+                job.issuePhotoUrl?.let { url ->
+                    Spacer(modifier = Modifier.height(LocalFixSpacing.medium))
+                    AuthenticatedPhoto(
+                        url = url,
+                        contentDescription = "Resident issue photo for ${job.title}",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(220.dp),
+                    )
+                }
             }
         }
         item {

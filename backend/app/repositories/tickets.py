@@ -1,4 +1,5 @@
 from collections.abc import Iterable
+from dataclasses import replace
 from threading import Lock
 from typing import Protocol
 from uuid import UUID
@@ -56,6 +57,8 @@ class TicketRepository(Protocol):
         event: TicketEvent,
         notification_jobs: tuple[NotificationJob, ...] = (),
     ) -> bool: ...
+
+    def attach_issue_photo_if_absent(self, ticket_id: UUID, key: str) -> bool: ...
 
     def list_events(self, ticket_id: UUID) -> list[TicketEvent]: ...
 
@@ -181,9 +184,19 @@ class InMemoryTicketRepository:
             current = self._tickets.get(ticket.id)
             if current is None or current.version != expected_version:
                 return False
-            self._tickets[ticket.id] = ticket
+            self._tickets[ticket.id] = replace(
+                ticket, issue_photo_key=current.issue_photo_key
+            )
             self._events_by_ticket.setdefault(ticket.id, []).append(event)
             self.notification_jobs.extend(notification_jobs)
+            return True
+
+    def attach_issue_photo_if_absent(self, ticket_id: UUID, key: str) -> bool:
+        with self._lock:
+            ticket = self._tickets.get(ticket_id)
+            if ticket is None or ticket.issue_photo_key is not None:
+                return False
+            self._tickets[ticket_id] = replace(ticket, issue_photo_key=key)
             return True
 
     def list_events(self, ticket_id: UUID) -> list[TicketEvent]:

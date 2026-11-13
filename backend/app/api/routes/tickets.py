@@ -1,6 +1,7 @@
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, File, HTTPException, Response, UploadFile, status
 
 from app.api.dependencies import (
     ResidentContextDependency,
@@ -14,6 +15,8 @@ from app.api.schemas import (
 )
 from app.domain.ticket_workflow import TransitionNotAllowed
 from app.services.tickets import (
+    CompletionPhoto,
+    InvalidIssuePhotoError,
     InvalidResidentReviewError,
     TicketNotFoundError,
     TicketVersionConflictError,
@@ -98,6 +101,51 @@ def get_completion_photo(
                 "message": "Completion photo not found.",
             },
         )
+    return Response(
+        content=evidence.content,
+        media_type=evidence.content_type,
+        headers={"Cache-Control": "private, max-age=300"},
+    )
+
+
+@router.post("/{ticket_id}/issue-photo", response_model=TicketResponse)
+async def upload_issue_photo(
+    ticket_id: UUID,
+    photo: Annotated[UploadFile, File()],
+    service: TicketServiceDependency,
+    resident: ResidentContextDependency,
+) -> TicketResponse:
+    try:
+        content = await photo.read(5 * 1024 * 1024 + 1)
+        ticket = service.upload_issue_photo(
+            ticket_id,
+            CompletionPhoto(content_type=photo.content_type or "", content=content),
+            resident,
+        )
+    except TicketNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "ticket_not_found", "message": "Ticket not found."},
+        ) from error
+    except InvalidIssuePhotoError as error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "invalid_issue_photo", "message": str(error)},
+        ) from error
+    finally:
+        await photo.close()
+    return TicketResponse.from_domain(ticket)
+
+
+@router.get("/{ticket_id}/issue-photo")
+def get_issue_photo(
+    ticket_id: UUID,
+    service: TicketServiceDependency,
+    resident: ResidentContextDependency,
+) -> Response:
+    evidence = service.get_issue_photo_for_resident(ticket_id, resident)
+    if evidence is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     return Response(
         content=evidence.content,
         media_type=evidence.content_type,

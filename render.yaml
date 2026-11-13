@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: localfix-api
+    runtime: docker
+    rootDir: backend
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    region: singapore
+    healthCheckPath: /health/ready
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: LOCALFIX_ENV
+        value: personal
+      - key: LOCALFIX_AUTH_REQUIRED
+        value: "true"
+      - key: LOCALFIX_FIREBASE_PROJECT_ID
+        value: localfix-be333
+      - key: LOCALFIX_FIREBASE_CREDENTIALS_JSON
+        sync: false
+      - key: LOCALFIX_BOOTSTRAP_MANAGER_UID
+        sync: false
+      - key: LOCALFIX_BOOTSTRAP_PROPERTY_NAME
+        sync: false
+      - key: LOCALFIX_BOOTSTRAP_UNIT_LABELS
+        sync: false
+      - key: LOCALFIX_BOOTSTRAP_PROPERTY_ID
+        value: 21a66a51-81b9-42e4-912b-b5c304ad31b3
+      - key: EVIDENCE_STORAGE_BACKEND
+        value: database

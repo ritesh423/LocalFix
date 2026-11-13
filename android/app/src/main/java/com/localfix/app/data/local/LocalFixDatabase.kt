@@ -12,7 +12,7 @@ import androidx.room.TypeConverters
         PendingResidentReviewEntity::class,
         PendingTicketCommandEntity::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = true,
 )
 @TypeConverters(RoomConverters::class)

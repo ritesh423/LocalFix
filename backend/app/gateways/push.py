@@ -1,7 +1,8 @@
+import json
 from typing import Protocol
 
 import firebase_admin
-from firebase_admin import messaging
+from firebase_admin import credentials, messaging
 from firebase_admin.exceptions import FirebaseError
 
 
@@ -20,12 +21,24 @@ class PushGateway(Protocol):
 
 
 class FirebasePushGateway:
-    def __init__(self, project_id: str | None = None) -> None:
+    def __init__(
+        self,
+        project_id: str | None = None,
+        credentials_json: str | None = None,
+    ) -> None:
         try:
             self._app = firebase_admin.get_app()
         except ValueError:
             options = {"projectId": project_id} if project_id else None
-            self._app = firebase_admin.initialize_app(options=options)
+            credential = (
+                credentials.Certificate(json.loads(credentials_json))
+                if credentials_json
+                else None
+            )
+            self._app = firebase_admin.initialize_app(
+                credential=credential,
+                options=options,
+            )
 
     def send(
         self,

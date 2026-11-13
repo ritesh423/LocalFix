@@ -85,6 +85,37 @@ class SqlAlchemyTicketRepositoryTest(unittest.TestCase):
         self.assertFalse(retry.was_created)
         self.assertEqual(retry.ticket.id, created.id)
 
+    def test_issue_photo_reference_survives_repository_recreation(self) -> None:
+        engine = create_database_engine(self.database_url)
+        evidence = InMemoryEvidenceStorage()
+        service = TicketService(
+            SqlAlchemyTicketRepository(create_session_factory(engine)),
+            evidence_storage=evidence,
+        )
+        ticket = service.create_ticket(self.ticket_command(), DEMO_RESIDENT_CONTEXT).ticket
+        uploaded = service.upload_issue_photo(
+            ticket.id,
+            CompletionPhoto(content_type="image/jpeg", content=b"issue-photo"),
+            DEMO_RESIDENT_CONTEXT,
+        )
+        engine.dispose()
+
+        restored_engine = create_database_engine(self.database_url)
+        restored = TicketService(
+            SqlAlchemyTicketRepository(create_session_factory(restored_engine)),
+            evidence_storage=evidence,
+        )
+        try:
+            self.assertEqual(uploaded.issue_photo_key, restored.get_ticket(
+                ticket.id, DEMO_RESIDENT_CONTEXT
+            ).issue_photo_key)
+            self.assertEqual(
+                restored.get_issue_photo_for_resident(ticket.id, DEMO_RESIDENT_CONTEXT).content,
+                b"issue-photo",
+            )
+        finally:
+            restored_engine.dispose()
+
     def test_device_registration_survives_engine_recreation(self) -> None:
         installation_id = uuid4()
         first_engine = create_database_engine(self.database_url)

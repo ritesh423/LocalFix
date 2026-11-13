@@ -16,6 +16,9 @@ import java.util.UUID
 interface TicketApi {
     suspend fun createTicket(request: TicketCreatePayload): TicketResponse
 
+    suspend fun uploadIssuePhoto(ticketId: String, photoUri: String): TicketResponse =
+        error("Issue-photo upload is not supported.")
+
     suspend fun listTickets(): List<TicketResponse>
 
     suspend fun reviewTicket(
@@ -24,9 +27,12 @@ interface TicketApi {
     ): TicketResponse
 
     fun completionPhotoUrl(ticketId: String): String? = null
+
+    fun issuePhotoUrl(ticketId: String): String? = null
 }
 
 interface ManagerTicketApi {
+    fun managerIssuePhotoUrl(ticketId: String): String? = null
     suspend fun listManagerTickets(): List<TicketResponse>
 
     suspend fun listManagerWorkers(): List<WorkerResponse>
@@ -50,6 +56,7 @@ interface ManagerTicketApi {
 }
 
 interface WorkerTicketApi {
+    fun workerIssuePhotoUrl(ticketId: String): String? = null
     suspend fun listWorkerTickets(): List<TicketResponse>
 
     suspend fun listWorkerTicketEvents(ticketId: String): List<TicketEventResponse>
@@ -174,6 +181,7 @@ data class TicketResponse(
     @SerialName("assigned_worker") val assignedWorker: String?,
     @SerialName("completion_note") val completionNote: String? = null,
     @SerialName("parts_used") val partsUsed: List<String> = emptyList(),
+    @SerialName("has_issue_photo") val hasIssuePhoto: Boolean = false,
     @SerialName("has_completion_photo") val hasCompletionPhoto: Boolean = false,
     @SerialName("completion_submitted_at") val completionSubmittedAt: String? = null,
     @SerialName("resident_rating") val residentRating: Int? = null,
@@ -209,6 +217,16 @@ class HttpTicketApi(
             method = "POST",
             path = "/tickets",
             requestBody = json.encodeToString(request),
+        )
+        return json.decodeFromString(responseBody)
+    }
+
+    override suspend fun uploadIssuePhoto(ticketId: String, photoUri: String): TicketResponse {
+        val responseBody = executePhotoUpload(
+            path = "/tickets/$ticketId/issue-photo",
+            photoUriText = photoUri,
+            fields = emptyList(),
+            filenamePrefix = "issue-photo",
         )
         return json.decodeFromString(responseBody)
     }
@@ -264,6 +282,15 @@ class HttpTicketApi(
 
     override fun completionPhotoUrl(ticketId: String): String =
         "$baseUrl/tickets/$ticketId/completion-photo"
+
+    override fun issuePhotoUrl(ticketId: String): String =
+        "$baseUrl/tickets/$ticketId/issue-photo"
+
+    override fun managerIssuePhotoUrl(ticketId: String): String =
+        "$baseUrl/manager/tickets/$ticketId/issue-photo"
+
+    override fun workerIssuePhotoUrl(ticketId: String): String =
+        "$baseUrl/worker/tickets/$ticketId/issue-photo"
 
     override suspend fun listManagerTickets(): List<TicketResponse> {
         val responseBody = execute(method = "GET", path = "/manager/tickets")
@@ -357,11 +384,26 @@ class HttpTicketApi(
     private suspend fun executeCompletionUpload(
         ticketId: String,
         request: TicketCompletionPayload,
+    ): String = executePhotoUpload(
+        path = "/worker/tickets/$ticketId/completion",
+        photoUriText = request.photoUri,
+        fields = listOf(
+            "expected_version" to request.expectedVersion.toString(),
+            "completion_note" to request.completionNote,
+        ) + request.partsUsed.map { "parts_used" to it },
+        filenamePrefix = "completion-photo",
+    )
+
+    private suspend fun executePhotoUpload(
+        path: String,
+        photoUriText: String,
+        fields: List<Pair<String, String>>,
+        filenamePrefix: String,
     ): String = withContext(Dispatchers.IO) {
-        val photoUri = Uri.parse(request.photoUri)
+        val photoUri = Uri.parse(photoUriText)
         val contentType = contentResolver.getType(photoUri) ?: "image/jpeg"
         val boundary = "LocalFix-${UUID.randomUUID()}"
-        val connection = URL("$baseUrl/worker/tickets/$ticketId/completion")
+        val connection = URL("$baseUrl$path")
             .openConnection() as HttpURLConnection
         try {
             connection.requestMethod = "POST"
@@ -387,20 +429,18 @@ class HttpTicketApi(
                     writeText("\r\n")
                 }
 
-                writeField("expected_version", request.expectedVersion.toString())
-                writeField("completion_note", request.completionNote)
-                request.partsUsed.forEach { part -> writeField("parts_used", part) }
+                fields.forEach { (name, value) -> writeField(name, value) }
                 writeText("--$boundary\r\n")
                 writeText(
                     "Content-Disposition: form-data; name=\"photo\"; " +
-                        "filename=\"completion-photo.${contentType.toExtension()}\"\r\n",
+                        "filename=\"$filenamePrefix.${contentType.toExtension()}\"\r\n",
                 )
                 writeText("Content-Type: $contentType\r\n\r\n")
                 val input = runCatching { contentResolver.openInputStream(photoUri) }
                     .getOrElse { error ->
-                        throw CompletionPhotoUnavailableException(error)
+                        throw SelectedPhotoUnavailableException(error)
                     }
-                    ?: throw CompletionPhotoUnavailableException()
+                    ?: throw SelectedPhotoUnavailableException()
                 input.use { it.copyTo(output) }
                 writeText("\r\n--$boundary--\r\n")
             }
@@ -463,8 +503,9 @@ class HttpTicketApi(
     }
 
     private companion object {
-        const val CONNECT_TIMEOUT_MILLIS = 5_000
-        const val READ_TIMEOUT_MILLIS = 10_000
+        // A sleeping free Render service can need about a minute to wake up.
+        const val CONNECT_TIMEOUT_MILLIS = 15_000
+        const val READ_TIMEOUT_MILLIS = 90_000
     }
 }
 
@@ -481,5 +522,5 @@ class TicketApiException(
     val responseBody: String,
 ) : Exception("Ticket API request failed with HTTP $statusCode")
 
-class CompletionPhotoUnavailableException(cause: Throwable? = null) :
-    IllegalStateException("The selected completion photo is no longer available.", cause)
+class SelectedPhotoUnavailableException(cause: Throwable? = null) :
+    IllegalStateException("The selected photo is no longer available.", cause)

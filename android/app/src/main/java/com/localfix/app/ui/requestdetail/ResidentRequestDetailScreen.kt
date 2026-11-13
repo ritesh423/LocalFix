@@ -50,6 +50,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.localfix.app.ui.components.AuthenticatedPhoto
 import coil3.compose.AsyncImage
 import com.localfix.app.data.model.ResidentReviewDecision
 import com.localfix.app.ui.components.RequestStatusBadge
@@ -108,19 +109,32 @@ fun ResidentRequestDetailScreen(
                 }
             }
         }
+        uiState.issuePhotoUrl?.let { photoUrl ->
+            item {
+                DetailSection(title = "Photo evidence") {
+                    AuthenticatedPhoto(
+                        url = photoUrl,
+                        contentDescription = "Photo attached to ${uiState.title}",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(220.dp)
+                            .clip(RoundedCornerShape(LocalFixRadius.medium)),
+                    )
+                }
+            }
+        }
         if (uiState.completionNote != null) {
             item {
                 DetailSection(title = "Worker completion") {
                     uiState.completionPhotoUrl?.let { photoUrl ->
-                        AsyncImage(
-                            model = photoUrl,
+                        AuthenticatedPhoto(
+                            url = photoUrl,
                             contentDescription = "After-repair photo for ${uiState.title}",
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(220.dp)
                                 .clip(RoundedCornerShape(LocalFixRadius.medium))
                                 .testTag("resident-completion-photo"),
-                            contentScale = ContentScale.Crop,
                         )
                         Spacer(modifier = Modifier.height(LocalFixSpacing.medium))
                     }

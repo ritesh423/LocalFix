@@ -1,7 +1,8 @@
+import json
 from typing import Protocol
 
 import firebase_admin
-from firebase_admin import auth
+from firebase_admin import auth, credentials
 from firebase_admin.exceptions import FirebaseError
 
 from app.domain.auth import AuthenticatedIdentity
@@ -20,12 +21,24 @@ class IdentityDirectory(Protocol):
 
 
 class FirebaseIdentityTokenVerifier:
-    def __init__(self, project_id: str | None = None) -> None:
+    def __init__(
+        self,
+        project_id: str | None = None,
+        credentials_json: str | None = None,
+    ) -> None:
         try:
             self._app = firebase_admin.get_app()
         except ValueError:
             options = {"projectId": project_id} if project_id else None
-            self._app = firebase_admin.initialize_app(options=options)
+            credential = (
+                credentials.Certificate(json.loads(credentials_json))
+                if credentials_json
+                else None
+            )
+            self._app = firebase_admin.initialize_app(
+                credential=credential,
+                options=options,
+            )
 
     def verify(self, token: str) -> AuthenticatedIdentity:
         try:
@@ -40,7 +53,9 @@ class FirebaseIdentityTokenVerifier:
                 email_verified=decoded.get("email_verified") is True,
             )
         except (FirebaseError, KeyError, TypeError, ValueError) as error:
-            raise InvalidIdentityTokenError("Firebase ID token is not valid.") from error
+            raise InvalidIdentityTokenError(
+                "Firebase ID token is not valid."
+            ) from error
 
     @staticmethod
     def _optional_text(value: object) -> str | None:
@@ -49,12 +64,24 @@ class FirebaseIdentityTokenVerifier:
 
 
 class FirebaseIdentityDirectory:
-    def __init__(self, project_id: str | None = None) -> None:
+    def __init__(
+        self,
+        project_id: str | None = None,
+        credentials_json: str | None = None,
+    ) -> None:
         try:
             self._app = firebase_admin.get_app()
         except ValueError:
             options = {"projectId": project_id} if project_id else None
-            self._app = firebase_admin.initialize_app(options=options)
+            credential = (
+                credentials.Certificate(json.loads(credentials_json))
+                if credentials_json
+                else None
+            )
+            self._app = firebase_admin.initialize_app(
+                credential=credential,
+                options=options,
+            )
 
     def find_by_email(self, email: str) -> AuthenticatedIdentity | None:
         try:

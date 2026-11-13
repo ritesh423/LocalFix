@@ -22,7 +22,21 @@ jobs:
       run:
         working-directory: backend
     env:
-      DATABASE_URL: sqlite:///./ci-localfix.db
+      DATABASE_URL: postgresql+psycopg://localfix:localfix@localhost:5432/localfix
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: localfix
+          POSTGRES_USER: localfix
+          POSTGRES_PASSWORD: localfix
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U localfix -d localfix"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
 
     steps:
       - name: Check out the project
@@ -46,7 +60,7 @@ jobs:
       - name: Run backend tests
         run: python -m unittest discover -s tests
 
-      - name: Verify a clean database upgrade
+      - name: Verify every migration on PostgreSQL
         run: alembic upgrade head
 
   android:

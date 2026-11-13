@@ -10,6 +10,18 @@ if (file("google-services.json").exists()) {
     apply(plugin = "com.google.gms.google-services")
 }
 
+val hostedApiBaseUrl = providers.gradleProperty("localfixApiBaseUrl")
+    .orNull
+    ?.trim()
+    .orEmpty()
+require(hostedApiBaseUrl.isEmpty() || (
+    hostedApiBaseUrl.startsWith("https://") &&
+        '"' !in hostedApiBaseUrl &&
+        '\\' !in hostedApiBaseUrl
+)) {
+    "localfixApiBaseUrl must be an HTTPS URL."
+}
+
 android {
     namespace = "com.localfix.app"
     compileSdk = 36
@@ -22,6 +34,7 @@ android {
         versionName = "0.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "API_BASE_URL", "\"$hostedApiBaseUrl\"")
     }
 
     buildTypes {
@@ -41,6 +54,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
